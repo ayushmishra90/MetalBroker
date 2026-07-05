@@ -1,0 +1,24 @@
+syntax = "proto3";
+
+package metalbroker.service.metal;
+
+option java_package = "com.hugoserve.metalbroker.service.proto.metal";
+option java_multiple_files = true;
+import "google/protobuf/timestamp.proto";
+
+
+message MetalLatestEntity {
+  int64 metal_id = 1;
+  string metal_code = 2;
+
+  google.protobuf.Timestamp feed_ts_utc = 3;
+  google.protobuf.Timestamp captured_at_utc = 4;
+
+  double ask = 5;
+  double mid = 6;
+  double bid = 7;
+  double value = 8;
+  double performance = 9;
+
+  string source = 10;
+}

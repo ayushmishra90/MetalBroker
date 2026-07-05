@@ -1,0 +1,38 @@
+# Maven
+target/
+pom.xml.tag
+pom.xml.next
+pom.xml.back
+pom.xml.versions
+*.html.next
+*.html.back
+
+# Gradle
+build/
+.gradle
+.
+# IDE specific files
+.idea/         # IntelliJ
+.vscode/       # VS Code
+.classpath
+.project
+.settings/
+*.iml
+
+# Operating System files
+.DS_Store      # macOS
+
+# Java class files and archives
+*.class
+*.jar
+*.war
+*.zip
+*.tar.gz
+
+# Log files
+logs/
+*.log
+npm-debug.log*
+
+# Environment specific files
+.env

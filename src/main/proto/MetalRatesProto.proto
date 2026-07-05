@@ -1,0 +1,319 @@
+syntax = "proto3";
+
+package metalbroker.rates;
+
+import "google/protobuf/timestamp.proto"; // Required for Timestamp
+// If using specific Date types, you'd import "google/type/date.proto"
+
+option java_package = "com.hugoserve.metalbroker.proto";
+option java_outer_classname = "MetalRatesProto";
+
+enum WeightUnit {
+  WEIGHT_UNIT_UNSPECIFIED = 0;
+  g = 1;
+  kg = 2;
+  oz = 3;
+}
+
+enum Metal {
+  METAL_UNSPECIFIED = 0;
+  XAG = 1;
+  XAU = 2;
+  XPD = 3;
+  XPT = 4;
+}
+
+enum Currency {
+  CURRENCY_UNSPECIFIED = 0;
+  PKR = 1;
+  INR = 2;
+  USD = 3;
+  EUR = 4;
+  JPY = 5;
+  AUD = 6;
+}
+
+// --- NEW ENUMS FOR AUTH & TRADING ---
+
+enum UserRole {
+  ROLE_UNSPECIFIED = 0;
+  USER = 1;
+  ADMIN = 2;
+}
+
+enum TradeType {
+  TRADE_TYPE_UNSPECIFIED = 0;
+  BUY = 1;
+  SELL = 2;
+}
+
+// --- AUTHENTICATION MESSAGES ---
+
+message LoginRequest {
+  string email = 1;
+  string password = 2;
+}
+
+message RefreshTokenRequest {
+  string refresh_token = 1;
+}
+
+message RegisterRequest {
+  string email = 1;
+  string password = 2;
+  string first_name = 3;
+  string last_name = 4;
+}
+
+message TokenPair {
+  string access_token = 1;
+  string refresh_token = 2;
+  google.protobuf.Timestamp access_expires_at = 3;
+  google.protobuf.Timestamp refresh_expires_at = 4;
+}
+
+message AuthResponse {
+  bool success = 1;
+  string code = 2;
+  string message = 3;
+  UserRole role = 4;
+  TokenPair tokens = 5; // Only populated on success
+}
+message LogoutRequest {
+  string refresh_token = 1;
+}
+
+// --- WALLET & TRADING MESSAGES (Future Proofing) ---
+
+message WalletBalance {
+  Metal metal = 1;        // Using your existing Metal enum
+  double balance = 2;     // Quantity
+  double valuation = 3;   // Current Value in base currency
+  WeightUnit unit = 4;
+  Currency currency = 5;
+}
+
+message WalletResponse {
+  bool success = 1;
+  string message = 2;
+  double cash_balance = 3;
+}
+
+message WalletSummary {
+  string wallet_id = 1;
+  Currency currency= 2;
+  repeated WalletBalance balance = 3;
+  double cash_balance = 4;
+  double total_equity = 5;
+}
+
+message TradeRequest {
+  TradeType type = 1;
+  Metal metal = 2;
+
+  // ONE of these must be set for BUY
+  double quantity = 3;        // grams
+  double amount = 4;      // INR
+
+}
+
+
+message TradeResponse {
+  bool success = 1;
+  string message = 2;
+  string trade_id = 3;
+  double executed_price = 4;
+  double total_cost = 5;
+
+  optional double wallet_balance = 6;
+}
+
+message TradeHistoryItem {
+  string trade_id = 1;
+  TradeType type = 2;
+  Metal metal = 3;
+  double quantity = 4;
+  double executed_price = 5;
+  double total_amount = 6;
+  google.protobuf.Timestamp executed_at_utc = 7;
+}
+
+message TradeHistoryResponse {
+  bool success = 1;
+  string message = 2;
+  repeated TradeHistoryItem trades = 3;
+}
+//RateAnalysis
+
+message RateAnalysis {
+  double start_price = 1;
+  double end_price = 2;
+  double high = 3;
+  double low = 4;
+
+  double absolute_change = 5;
+  double percentage_change = 6;
+  double volatility_pct = 7;
+
+  string trend = 8;
+}
+
+message IntradayAnalysisResponse {
+  bool success = 1;
+  string message = 2;
+  Metal metal = 3;
+  google.protobuf.Timestamp from_utc = 4;
+  google.protobuf.Timestamp to_utc = 5;
+  RateAnalysis analysis = 6;
+}
+
+// --- EXISTING RATE MESSAGES (UNCHANGED) ---
+
+message SpotPrice {
+  // Supports "2026-01-15T22:15:00+00:00"
+  google.protobuf.Timestamp date = 1;
+  WeightUnit weight_unit = 2;
+  double ask = 3;
+  double mid = 4;
+  double bid = 5;
+  double value = 6;
+  double performance = 7;
+}
+
+message HistoricalSpotPricesResponse {
+  Metal metal = 1;
+  Currency currency = 2;
+  WeightUnit weight_unit = 3;
+  HistoricalEmbeddedItems embedded = 4 [json_name = "_embedded"];
+}
+
+message SpotPricesResponse {
+  Metal metal = 1;
+  Currency currency = 2;
+  WeightUnit weight_unit = 3;
+  EmbeddedItems embedded = 4 [json_name = "_embedded"];
+}
+
+message EmbeddedItems {
+  repeated SpotPrice items = 1;
+  int32 markets_closed = 2;
+  SpotPriceItem last_historical_spot_price = 3;
+}
+
+message HistoricalEmbeddedItems {
+  repeated SpotPriceItem items = 1;
+  Performances performances = 2;
+}
+
+message SpotPriceItem {
+  string date = 1;
+  WeightUnit weight_unit = 2;
+
+  double close = 3;
+  double high = 4;
+  double low = 5;
+  double open = 6;
+
+  optional double ma50 = 7;
+  optional double ma200 = 8;
+}
+
+message Performances {
+  double D5  = 1 [json_name = "5D"];
+  double M1  = 2 [json_name = "1M"];
+  double YTD = 3 [json_name = "YTD"];
+  double Y1  = 4 [json_name = "1Y"];
+  double Y5  = 5 [json_name = "5Y"];
+  double Y10 = 6 [json_name = "10Y"];
+  double MAX = 7 [json_name = "MAX"];
+}
+
+message AdminWriteResult {
+  bool ok = 1;
+  string message = 2;
+  int64 affected = 3;
+}
+message MetalInfo {
+  int64 id = 1;
+  Metal metal = 2;      // XAU/XAG/XPD/XPT (maps from DB metals.code)
+  string name = 3;      // "gold"
+  bool is_active = 4;
+}
+
+message MetalList {
+  repeated MetalInfo items = 1;
+}
+
+message LatestSnapshot {
+  Metal metal = 1;
+
+  // feed timestamp from API
+  google.protobuf.Timestamp feed_ts_utc = 2;
+
+  // db captured time (when scheduler fetched)
+  google.protobuf.Timestamp captured_at_utc = 3;
+
+  double ask = 4;
+  double mid = 5;
+  double bid = 6;
+  double value = 7;
+  double performance = 8;
+  string source = 9;
+}
+
+message Tick5m {
+  Metal metal = 1;
+  google.protobuf.Timestamp ts_utc = 2;
+  double ask = 3;
+  double mid = 4;
+  double bid = 5;
+  double value = 6;
+  double performance = 7;
+  string source = 8;
+}
+
+message Tick5mList {
+  Metal metal = 1;
+  repeated Tick5m items = 2;
+}
+
+message DailyHistoryCandle {
+  Metal metal = 1;
+  string day_utc = 2;   // "yyyy-MM-dd" (easy, stable)
+
+  double open = 3;
+  double high = 4;
+  double low = 5;
+  double close = 6;
+
+  optional double ma50 = 7;
+  optional double ma200 = 8;
+  string source = 9;
+}
+
+message DailyHistoryList {
+  Metal metal = 1;
+  repeated DailyHistoryCandle items = 2;
+}
+
+
+message PageInfo {
+  int32 page = 1;           // current page (0-based)
+  int32 size = 2;           // page size
+  int64 total_elements = 3; // total rows
+  int32 total_pages = 4;    // total pages
+}
+
+message Tick5mPage {
+  Metal metal = 1;
+  repeated Tick5m items = 2;
+  PageInfo page = 3;
+}
+
+message DailyHistoryPage {
+  Metal metal = 1;
+  repeated DailyHistoryCandle items = 2;
+  PageInfo page = 3;
+}
+
+

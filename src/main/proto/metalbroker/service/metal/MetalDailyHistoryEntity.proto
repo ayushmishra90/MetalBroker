@@ -1,0 +1,19 @@
+syntax = "proto3";
+
+package metalbroker.service.metal;
+
+option java_package = "com.hugoserve.metalbroker.service.proto.metal";
+option java_outer_classname = "MetalDailyHistoryProto";
+
+message MetalDailyHistoryEntity {
+  int64 id = 1;
+  int64 metal_id = 2;
+  string day_utc = 3;
+  double open = 4;
+  double high = 5;
+  double low = 6;
+  double close = 7;
+  optional double ma50 = 8;
+  optional double ma200 = 9;
+  string source = 10;
+}

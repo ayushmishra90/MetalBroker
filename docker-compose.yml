@@ -1,0 +1,31 @@
+version: '3.8'
+
+services:
+  mysql-db:
+    image: mysql:8.0
+    container_name: metalbroker_db
+    environment:
+      MYSQL_DATABASE: metalbroker_dev
+      MYSQL_USER: mysql_user
+      MYSQL_PASSWORD: secure_password123
+      MYSQL_ROOT_PASSWORD: root_secure_password123
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+
+  nats-server:
+    image: nats:2.10-alpine
+    container_name: metalbroker_nats
+    ports:
+      - "4222:4222"
+      - "8222:8222"
+
+  redis-cache:
+    image: redis:7-alpine
+    container_name: metalbroker_redis
+    ports:
+      - "6379:6379"
+
+volumes:
+  mysql_data:

@@ -1,0 +1,14 @@
+syntax = "proto3";
+
+package metalbroker.service.wallet;
+
+import "google/protobuf/timestamp.proto";
+option java_multiple_files = true;
+option java_package = "com.hugoserve.metalbroker.service.proto.wallet";
+
+message WalletEntity {
+  int64 wallet_id = 1;
+  int64 user_id = 2;
+  double inr_balance = 3;
+  google.protobuf.Timestamp created_at_utc = 4;
+}

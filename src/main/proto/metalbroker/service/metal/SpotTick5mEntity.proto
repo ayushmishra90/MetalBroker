@@ -1,0 +1,21 @@
+syntax = "proto3";
+
+package metalbroker.service.metal;
+
+option java_package = "com.hugoserve.metalbroker.service.proto.metal";
+option java_multiple_files = true;   // 🔥 REQUIRED
+option java_outer_classname = "SpotTick5mProto"; // 🔥 REQUIRED
+
+import "google/protobuf/timestamp.proto";
+
+message SpotTick5mEntity {
+  int64 metal_id = 1;
+  google.protobuf.Timestamp ts_utc = 2;
+  double ask = 3;
+  double mid = 4;
+  double bid = 5;
+  double value = 6;
+  double performance = 7;
+  string source = 8;
+}
+

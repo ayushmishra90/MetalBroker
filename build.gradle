@@ -1,0 +1,123 @@
+plugins {
+    id 'java'
+    id 'org.springframework.boot' version '4.0.1'
+    id 'io.spring.dependency-management' version '1.1.7'
+    id "com.google.protobuf" version "0.9.6"
+}
+
+group = 'com.hugoserve'
+version = '0.0.1-SNAPSHOT'
+description = 'goldBroker'
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(25)
+    }
+}
+
+configurations {
+    compileOnly {
+        extendsFrom annotationProcessor
+    }
+}
+
+repositories {
+    mavenCentral()
+}
+dependencies {
+
+
+//    implementation 'org.springframework.boot:spring-boot-starter-webflux'
+
+    // Core (Servlet / MVC)
+    implementation "org.springframework.boot:spring-boot-starter-web"
+
+    // JPA + DB
+    implementation "org.springframework.boot:spring-boot-starter-data-jpa"
+    runtimeOnly "com.mysql:mysql-connector-j"
+
+    // Security
+    implementation "org.springframework.boot:spring-boot-starter-security"
+
+    // Validation
+    implementation "org.springframework.boot:spring-boot-starter-validation"
+
+    // Actuator (optional)
+    implementation "org.springframework.boot:spring-boot-starter-actuator"
+
+    // Protobuf
+
+    implementation "com.google.protobuf:protobuf-java:4.28.3"
+    implementation "com.google.protobuf:protobuf-java-util:4.28.3"
+//    implementation "org.springframework:spring-web:6.2.1"
+
+    implementation 'org.flywaydb:flyway-core'
+    implementation 'org.flywaydb:flyway-mysql'
+
+//    caching
+    implementation "org.springframework.boot:spring-boot-starter-cache"
+    implementation "org.springframework.boot:spring-boot-starter-data-redis"
+
+
+    // JWT
+    implementation 'io.jsonwebtoken:jjwt-api:0.11.5'
+    runtimeOnly 'io.jsonwebtoken:jjwt-impl:0.11.5'
+    runtimeOnly 'io.jsonwebtoken:jjwt-jackson:0.11.5'
+
+
+
+
+    // Lombok (optional)
+    compileOnly "org.projectlombok:lombok"
+    annotationProcessor "org.projectlombok:lombok"
+
+    // Devtools (optional)
+    developmentOnly "org.springframework.boot:spring-boot-devtools"
+
+
+    implementation platform('org.testcontainers:testcontainers-bom:1.20.4')
+
+    // Tests (single correct starter)
+    testImplementation "org.springframework.boot:spring-boot-starter-test"
+    testImplementation "org.springframework.security:spring-security-test"
+
+    testImplementation 'org.testcontainers:junit-jupiter'
+    testImplementation 'org.testcontainers:mysql'
+    testImplementation("org.testcontainers:testcontainers:2.0.2")
+
+    implementation "io.nats:jnats:2.17.6"
+
+    implementation 'org.flywaydb:flyway-core'
+    runtimeOnly 'com.mysql:mysql-connector-j'
+
+}
+
+
+tasks.named('test') {
+    useJUnitPlatform()
+}
+
+protobuf {
+    protoc {
+        artifact = "com.google.protobuf:protoc:4.28.3"
+    }
+    generateProtoTasks {
+        all().each { task ->
+            task.builtins {
+                java {}
+            }
+        }
+    }
+}
+
+sourceSets {
+    main {
+        proto {
+            srcDir 'src/main/proto'
+        }
+    }
+}
+
+tasks.named("processResources") {
+    exclude("**/*.proto")
+}

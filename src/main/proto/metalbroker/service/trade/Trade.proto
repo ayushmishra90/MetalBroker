@@ -1,0 +1,53 @@
+syntax = "proto3";
+
+package metalbroker.service.trade;
+
+import "google/protobuf/timestamp.proto";
+import "metalbroker/service/common/Common.proto";
+
+option java_package = "com.hugoserve.metalbroker.proto.trade";
+option java_multiple_files = true;
+
+// ---------- ENUM ----------
+
+enum TradeType {
+  TRADE_TYPE_UNSPECIFIED = 0;
+  BUY = 1;
+  SELL = 2;
+}
+
+// ---------- REQUEST ----------
+
+message TradeRequest {
+  TradeType type = 1;
+  metalbroker.service.common.Metal metal = 2;
+  double quantity = 3;
+  double amount = 4;
+}
+
+// ---------- RESPONSE ----------
+
+message TradeResponse {
+  bool success = 1;
+  string message = 2;
+  string trade_id = 3;
+  double executed_price = 4;
+  double total_cost = 5;
+  double wallet_balance = 6;
+}
+
+message TradeHistoryItem {
+  string trade_id = 1;
+  TradeType type = 2;
+  metalbroker.service.common.Metal metal = 3;
+  double quantity = 4;
+  double executed_price = 5;
+  double total_amount = 6;
+  google.protobuf.Timestamp executed_at_utc = 7;
+}
+
+message TradeHistoryResponse {
+  bool success = 1;
+  string message = 2;
+  repeated TradeHistoryItem trades = 3;
+}

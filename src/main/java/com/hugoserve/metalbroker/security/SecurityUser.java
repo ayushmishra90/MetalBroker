@@ -1,0 +1,33 @@
+package com.hugoserve.metalbroker.security;
+
+import com.hugoserve.metalbroker.domain.db.UserDB;
+import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.userdetails.UserDetails;
+
+import java.util.List;
+
+public class SecurityUser implements UserDetails {
+
+    private final UserDB user;
+
+    public SecurityUser(UserDB user) {
+        this.user = user;
+    }
+
+    public UserDB getUser() {
+        return user;
+    }
+
+    @Override
+    public List<? extends GrantedAuthority> getAuthorities() {
+        return List.of(new SimpleGrantedAuthority("ROLE_" + user.getRole().name()));
+    }
+
+    @Override public String getPassword() { return user.getPassword(); }
+    @Override public String getUsername() { return user.getEmail(); }
+    @Override public boolean isAccountNonExpired() { return true; }
+    @Override public boolean isAccountNonLocked() { return true; }
+    @Override public boolean isCredentialsNonExpired() { return true; }
+    @Override public boolean isEnabled() { return true; }
+}

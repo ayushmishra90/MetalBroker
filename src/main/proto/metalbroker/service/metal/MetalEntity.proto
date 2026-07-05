@@ -1,0 +1,13 @@
+syntax = "proto3";
+
+package metalbroker.service.metal;
+
+option java_package = "com.hugoserve.metalbroker.service.proto.metal";
+option java_multiple_files = true;
+
+message MetalEntity {
+  int64 id = 1;
+  string code = 2;
+  string name = 3;
+  bool active = 4;
+}

@@ -1,0 +1,4555 @@
+Index: src/main/java/com/hugoserve/goldbroker/GoldBrokerApplication.java
+===================================================================
+diff --git a/src/main/java/com/hugoserve/goldbroker/GoldBrokerApplication.java b/src/main/java/com/hugoserve/goldbroker/GoldBrokerApplication.java
+deleted file mode 100644
+--- a/src/main/java/com/hugoserve/goldbroker/GoldBrokerApplication.java	(revision c2519317e88f55e3783ddde2ea26df99646cbbe8)
++++ /dev/null	(revision c2519317e88f55e3783ddde2ea26df99646cbbe8)
+@@ -1,14 +0,0 @@
+-package com.hugoserve.goldbroker;
+-
+-import org.springframework.boot.SpringApplication;
+-import org.springframework.boot.autoconfigure.SpringBootApplication;
+-
+-@SpringBootApplication
+-public class GoldBrokerApplication {
+-
+-    public static void main(String[] args) {
+-
+-        SpringApplication.run(GoldBrokerApplication.class, args);
+-    }
+-
+-}
+Index: src/test/java/com/hugoserve/goldbroker/GoldBrokerApplicationTests.java
+===================================================================
+diff --git a/src/test/java/com/hugoserve/goldbroker/GoldBrokerApplicationTests.java b/src/test/java/com/hugoserve/goldbroker/GoldBrokerApplicationTests.java
+deleted file mode 100644
+--- a/src/test/java/com/hugoserve/goldbroker/GoldBrokerApplicationTests.java	(revision c2519317e88f55e3783ddde2ea26df99646cbbe8)
++++ /dev/null	(revision c2519317e88f55e3783ddde2ea26df99646cbbe8)
+@@ -1,13 +0,0 @@
+-package com.hugoserve.goldbroker;
+-
+-import org.junit.jupiter.api.Test;
+-import org.springframework.boot.test.context.SpringBootTest;
+-
+-@SpringBootTest
+-class GoldBrokerApplicationTests {
+-
+-    @Test
+-    void contextLoads() {
+-    }
+-
+-}
+Index: src/main/java/com/hugoserve/metalbroker/security/JwtService.java
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/src/main/java/com/hugoserve/metalbroker/security/JwtService.java b/src/main/java/com/hugoserve/metalbroker/security/JwtService.java
+new file mode 100644
+--- /dev/null	(date 1769492834372)
++++ b/src/main/java/com/hugoserve/metalbroker/security/JwtService.java	(date 1769492834372)
+@@ -0,0 +1,95 @@
++package com.hugoserve.metalbroker.security;
++
++import io.jsonwebtoken.Claims;
++import io.jsonwebtoken.Jwts;
++import io.jsonwebtoken.SignatureAlgorithm;
++import io.jsonwebtoken.io.Decoders;
++import io.jsonwebtoken.security.Keys;
++import org.springframework.beans.factory.annotation.Value;
++import org.springframework.security.core.userdetails.UserDetails;
++import org.springframework.stereotype.Service;
++import org.springframework.security.core.GrantedAuthority;
++
++import java.security.Key;
++import java.util.Date;
++import java.util.HashMap;
++import java.util.Map;
++import java.util.function.Function;
++import java.util.stream.Collectors;
++
++@Service
++public class JwtService {
++
++    @Value("${jwt.secret}")
++    private String secretKey;
++
++//    // Explicit constants
++//    public static final long ACCESS_EXPIRY = 1000 * 60 * 15; // 15 mins
++//    public static final long REFRESH_EXPIRY = 1000 * 60 * 60 * 24 * 7; // 7 days
++
++
++    public static final long ACCESS_EXPIRY = 1000 * 60 * 1; // 1 mins
++    public static final long REFRESH_EXPIRY = 1000 * 60 * 2; // 2 mins testing
++
++    public String extractUsername(String token) {
++        return extractClaim(token, Claims::getSubject);
++    }
++
++    public <T> T extractClaim(String token, Function<Claims, T> claimsResolver) {
++        final Claims claims = extractAllClaims(token);
++        return claimsResolver.apply(claims);
++    }
++
++    // ✅ FIX: Embed Role in Access Token
++    public String generateAccessToken(UserDetails userDetails) {
++        Map<String, Object> claims = new HashMap<>();
++        // Get the first role (assuming single role for now)
++        String role = userDetails.getAuthorities().stream()
++                .findFirst()
++                .map(GrantedAuthority::getAuthority)
++                .orElse("ROLE_USER");
++        claims.put("role", role);
++
++        return buildToken(claims, userDetails, ACCESS_EXPIRY);
++    }
++
++    public String generateRefreshToken(UserDetails userDetails) {
++        return buildToken(new HashMap<>(), userDetails, REFRESH_EXPIRY);
++    }
++
++    private String buildToken(Map<String, Object> extraClaims, UserDetails userDetails, long expiration) {
++        return Jwts.builder()
++                .setClaims(extraClaims)
++                .setSubject(userDetails.getUsername())
++                .setIssuedAt(new Date(System.currentTimeMillis()))
++                .setExpiration(new Date(System.currentTimeMillis() + expiration))
++                .signWith(getSignInKey(), SignatureAlgorithm.HS256)
++                .compact();
++    }
++
++    public boolean isTokenValid(String token, UserDetails userDetails) {
++        final String username = extractUsername(token);
++        return (username.equals(userDetails.getUsername())) && !isTokenExpired(token);
++    }
++
++    private boolean isTokenExpired(String token) {
++        return extractExpiration(token).before(new Date());
++    }
++
++    private Date extractExpiration(String token) {
++        return extractClaim(token, Claims::getExpiration);
++    }
++
++    private Claims extractAllClaims(String token) {
++        return Jwts.parserBuilder()
++                .setSigningKey(getSignInKey()) // Now works with Base64 key
++                .build()
++                .parseClaimsJws(token)
++                .getBody();
++    }
++
++    private Key getSignInKey() {
++        byte[] keyBytes = Decoders.BASE64.decode(secretKey);
++        return Keys.hmacShaKeyFor(keyBytes);
++    }
++}
+\ No newline at end of file
+Index: src/main/java/com/hugoserve/metalbroker/domain/repo/UserRepository.java
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/src/main/java/com/hugoserve/metalbroker/domain/repo/UserRepository.java b/src/main/java/com/hugoserve/metalbroker/domain/repo/UserRepository.java
+new file mode 100644
+--- /dev/null	(date 1769401480308)
++++ b/src/main/java/com/hugoserve/metalbroker/domain/repo/UserRepository.java	(date 1769401480308)
+@@ -0,0 +1,10 @@
++package com.hugoserve.metalbroker.domain.repo;
++
++
++import com.hugoserve.metalbroker.domain.entity.UserEntity;
++import org.springframework.data.jpa.repository.JpaRepository;
++import java.util.Optional;
++
++public interface UserRepository extends JpaRepository<UserEntity, Long> {
++    Optional<UserEntity> findByEmail(String email);
++}
+Index: build.gradle
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.BaseRevisionTextPatchEP
+<+>plugins {\n    id 'java'\n    id 'org.springframework.boot' version '4.0.1'\n    id 'io.spring.dependency-management' version '1.1.7'\n}\n\ngroup = 'com.hugoserve'\nversion = '0.0.1-SNAPSHOT'\ndescription = 'goldBroker'\n\njava {\n    toolchain {\n        languageVersion = JavaLanguageVersion.of(25)\n    }\n}\n\nconfigurations {\n    compileOnly {\n        extendsFrom annotationProcessor\n    }\n}\n\nrepositories {\n    mavenCentral()\n}\n\ndependencies {\n    implementation 'org.springframework.boot:spring-boot-starter-actuator'\n\n    implementation 'org.springframework.boot:spring-boot-starter-data-jpa-test'\n    implementation 'org.springframework.boot:spring-boot-starter-security'\n    implementation 'org.springframework.boot:spring-boot-starter-webmvc'\n    compileOnly 'org.projectlombok:lombok'\n    developmentOnly 'org.springframework.boot:spring-boot-devtools'\n    runtimeOnly 'com.mysql:mysql-connector-j'\n    annotationProcessor 'org.projectlombok:lombok'\n    testImplementation 'org.springframework.boot:spring-boot-starter-actuator-test'\n    testImplementation 'org.springframework.boot:spring-boot-starter-data-jpa-test'\n    testImplementation 'org.springframework.boot:spring-boot-starter-security-test'\n    testImplementation 'org.springframework.boot:spring-boot-starter-webmvc-test'\n    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'\n\n\n    // Web\n    implementation(\"org.springframework.boot:spring-boot-starter-web\")\n\n    // Validation\n    implementation(\"org.springframework.boot:spring-boot-starter-validation\")\n\n\n}\n\ntasks.named('test') {\n    useJUnitPlatform()\n}\n
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/build.gradle b/build.gradle
+--- a/build.gradle	(revision c2519317e88f55e3783ddde2ea26df99646cbbe8)
++++ b/build.gradle	(date 1769400951177)
+@@ -2,6 +2,7 @@
+     id 'java'
+     id 'org.springframework.boot' version '4.0.1'
+     id 'io.spring.dependency-management' version '1.1.7'
++    id "com.google.protobuf" version "0.9.6"
+ }
+ 
+ group = 'com.hugoserve'
+@@ -23,33 +24,94 @@
+ repositories {
+     mavenCentral()
+ }
+-
+ dependencies {
+-    implementation 'org.springframework.boot:spring-boot-starter-actuator'
++
+ 
+-    implementation 'org.springframework.boot:spring-boot-starter-data-jpa-test'
+-    implementation 'org.springframework.boot:spring-boot-starter-security'
+-    implementation 'org.springframework.boot:spring-boot-starter-webmvc'
+-    compileOnly 'org.projectlombok:lombok'
+-    developmentOnly 'org.springframework.boot:spring-boot-devtools'
+-    runtimeOnly 'com.mysql:mysql-connector-j'
+-    annotationProcessor 'org.projectlombok:lombok'
+-    testImplementation 'org.springframework.boot:spring-boot-starter-actuator-test'
+-    testImplementation 'org.springframework.boot:spring-boot-starter-data-jpa-test'
+-    testImplementation 'org.springframework.boot:spring-boot-starter-security-test'
+-    testImplementation 'org.springframework.boot:spring-boot-starter-webmvc-test'
+-    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
++//    implementation 'org.springframework.boot:spring-boot-starter-webflux'
+ 
++    // Core (Servlet / MVC)
++    implementation "org.springframework.boot:spring-boot-starter-web"
+ 
+-    // Web
+-    implementation("org.springframework.boot:spring-boot-starter-web")
++    // JPA + DB
++    implementation "org.springframework.boot:spring-boot-starter-data-jpa"
++    runtimeOnly "com.mysql:mysql-connector-j"
++
++    // Security
++    implementation "org.springframework.boot:spring-boot-starter-security"
+ 
+     // Validation
+-    implementation("org.springframework.boot:spring-boot-starter-validation")
++    implementation "org.springframework.boot:spring-boot-starter-validation"
++
++    // Actuator (optional)
++    implementation "org.springframework.boot:spring-boot-starter-actuator"
++
++    // Protobuf
++
++    implementation "com.google.protobuf:protobuf-java:4.28.3"
++    implementation "com.google.protobuf:protobuf-java-util:4.28.3"
++//    implementation "org.springframework:spring-web:6.2.1"
++
++    implementation 'org.flywaydb:flyway-core'
++    implementation 'org.flywaydb:flyway-mysql'
++
++//    caching
++    implementation("org.springframework.boot:spring-boot-starter-cache")
++    implementation("com.github.ben-manes.caffeine:caffeine:3.1.8")
++
++    // JWT
++    implementation 'io.jsonwebtoken:jjwt-api:0.11.5'
++    runtimeOnly 'io.jsonwebtoken:jjwt-impl:0.11.5'
++    runtimeOnly 'io.jsonwebtoken:jjwt-jackson:0.11.5'
++
+ 
+ 
++
++    // Lombok (optional)
++    compileOnly "org.projectlombok:lombok"
++    annotationProcessor "org.projectlombok:lombok"
++
++    // Devtools (optional)
++    developmentOnly "org.springframework.boot:spring-boot-devtools"
++
++
++    implementation platform('org.testcontainers:testcontainers-bom:1.20.4')
++
++    // Tests (single correct starter)
++    testImplementation "org.springframework.boot:spring-boot-starter-test"
++    testImplementation "org.springframework.security:spring-security-test"
++
++    testImplementation 'org.testcontainers:junit-jupiter'
++    testImplementation 'org.testcontainers:mysql'
++    testImplementation("org.testcontainers:testcontainers:2.0.2")
++
+ }
++
+ 
+ tasks.named('test') {
+     useJUnitPlatform()
+ }
++
++protobuf {
++    protoc {
++        artifact = "com.google.protobuf:protoc:4.28.3"
++    }
++    generateProtoTasks {
++        all().each { task ->
++            task.builtins {
++                java {}
++            }
++        }
++    }
++}
++
++sourceSets {
++    main {
++        proto {
++            srcDir 'src/main/proto'
++        }
++    }
++}
++
++tasks.named("processResources") {
++    exclude("**/*.proto")
++}
+Index: src/main/java/com/hugoserve/metalbroker/utils/MetalParamMapper.java
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/src/main/java/com/hugoserve/metalbroker/utils/MetalParamMapper.java b/src/main/java/com/hugoserve/metalbroker/utils/MetalParamMapper.java
+new file mode 100644
+--- /dev/null	(date 1768808952693)
++++ b/src/main/java/com/hugoserve/metalbroker/utils/MetalParamMapper.java	(date 1768808952693)
+@@ -0,0 +1,34 @@
++package com.hugoserve.metalbroker.utils;
++
++import com.hugoserve.metalbroker.proto.MetalRatesProto.Metal;
++
++public final class MetalParamMapper {
++
++    private MetalParamMapper() {}
++
++    public static Metal fromApi(String apiMetal) {
++        if (apiMetal == null || apiMetal.isBlank()) {
++            return Metal.UNRECOGNIZED;
++        }
++
++        // Convert to lowercase and trim to ensure " gold " or "GOLD" works
++        return switch (apiMetal.trim().toLowerCase()) {
++            case "gold", "xau"       -> Metal.XAU;
++            case "silver", "xag"     -> Metal.XAG;
++            case "platinum", "xpt"   -> Metal.XPT;
++            case "palladium", "xpd"  -> Metal.XPD;
++            default                  -> Metal.UNRECOGNIZED;
++        };
++    }
++
++    public static String toApi(Metal metal) {
++        return switch (metal) {
++            case XAU -> "XAU";
++            case XAG -> "XAG";
++            case XPT -> "XPT";
++            case XPD -> "XPD";
++            default  -> throw new IllegalArgumentException("Unknown metal enum: " + metal);
++        };
++    }
++
++}
+Index: src/main/java/com/hugoserve/metalbroker/facade/DbMetalAdminFacade.java
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/src/main/java/com/hugoserve/metalbroker/facade/DbMetalAdminFacade.java b/src/main/java/com/hugoserve/metalbroker/facade/DbMetalAdminFacade.java
+new file mode 100644
+--- /dev/null	(date 1769075645681)
++++ b/src/main/java/com/hugoserve/metalbroker/facade/DbMetalAdminFacade.java	(date 1769075645681)
+@@ -0,0 +1,65 @@
++package com.hugoserve.metalbroker.facade;
++
++import com.google.protobuf.util.JsonFormat;
++import com.hugoserve.metalbroker.domain.entity.MetalEntity;
++import com.hugoserve.metalbroker.proto.MetalRatesProto;
++import com.hugoserve.metalbroker.service.DbMetalAdminService;
++import com.hugoserve.metalbroker.utils.DbProtoMapper;
++import com.hugoserve.metalbroker.utils.ProtoJson;
++import org.springframework.http.ResponseEntity;
++import org.springframework.stereotype.Component;
++
++@Component
++public class DbMetalAdminFacade {
++
++    private final DbMetalAdminService service;
++    private final DbProtoMapper mapper;
++
++    public DbMetalAdminFacade(DbMetalAdminService service, DbProtoMapper mapper) {
++        this.service = service;
++        this.mapper = mapper;
++    }
++
++    public ResponseEntity<String> create(String json) throws Exception {
++        MetalRatesProto.MetalInfo req = parseMetalInfo(json);
++
++        if (req.getMetal() == MetalRatesProto.Metal.METAL_UNSPECIFIED) {
++            return ResponseEntity.badRequest().body("{\"error\":\"metal must be XAU/XAG/XPD/XPT\"}");
++        }
++
++        String code = req.getMetal().name();
++        MetalEntity saved = service.upsert(code, req.getName(), req.getIsActive());
++        return ResponseEntity.ok(ProtoJson.print(mapper.metalInfo(saved)));
++    }
++
++    public ResponseEntity<String> update(String code, String json) throws Exception {
++        // Parse but treat missing fields as null (so we don't accidentally set isActive=false)
++        MetalRatesProto.MetalInfo req = parseMetalInfo(json);
++
++        String nameOrNull = (req.getName() == null || req.getName().isBlank()) ? null : req.getName();
++
++        // IMPORTANT: proto boolean defaults false, so we can't know if omitted unless you change parser strategy.
++        // Best workaround: for update, parse raw JSON to check if "isActive"/"is_active" key exists.
++        // For now, simplest: require is_active always in update OR you use PATCH later.
++        Boolean isActiveOrNull = null; // safer default
++        if (json.contains("\"isActive\"") || json.contains("\"is_active\"")) {
++            isActiveOrNull = req.getIsActive();
++        }
++
++        return service.update(code, nameOrNull, isActiveOrNull)
++                .map(saved -> ResponseEntity.ok(ProtoJson.print(mapper.metalInfo(saved))))
++                .orElseGet(() -> ResponseEntity.notFound().build());
++    }
++
++    public ResponseEntity<String> deactivate(String code) {
++        return service.deactivate(code)
++                .map(saved -> ResponseEntity.ok(ProtoJson.print(mapper.metalInfo(saved))))
++                .orElseGet(() -> ResponseEntity.notFound().build());
++    }
++
++    private MetalRatesProto.MetalInfo parseMetalInfo(String json) throws Exception {
++        var b = MetalRatesProto.MetalInfo.newBuilder();
++        JsonFormat.parser().ignoringUnknownFields().merge(json, b);
++        return b.build();
++    }
++}
+Index: src/main/java/com/hugoserve/metalbroker/service/DbMetalAdminService.java
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/src/main/java/com/hugoserve/metalbroker/service/DbMetalAdminService.java b/src/main/java/com/hugoserve/metalbroker/service/DbMetalAdminService.java
+new file mode 100644
+--- /dev/null	(date 1769075202694)
++++ b/src/main/java/com/hugoserve/metalbroker/service/DbMetalAdminService.java	(date 1769075202694)
+@@ -0,0 +1,11 @@
++package com.hugoserve.metalbroker.service;
++
++import com.hugoserve.metalbroker.domain.entity.MetalEntity;
++
++import java.util.Optional;
++
++public interface DbMetalAdminService {
++    MetalEntity upsert(String code, String name, boolean isActive);
++    Optional<MetalEntity> update(String code, String nameOrNull, Boolean isActiveOrNull);
++    Optional<MetalEntity> deactivate(String code);
++}
+Index: src/main/java/com/hugoserve/metalbroker/service/impl/DbMetalAdminServiceImpl.java
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/src/main/java/com/hugoserve/metalbroker/service/impl/DbMetalAdminServiceImpl.java b/src/main/java/com/hugoserve/metalbroker/service/impl/DbMetalAdminServiceImpl.java
+new file mode 100644
+--- /dev/null	(date 1769146596392)
++++ b/src/main/java/com/hugoserve/metalbroker/service/impl/DbMetalAdminServiceImpl.java	(date 1769146596392)
+@@ -0,0 +1,56 @@
++package com.hugoserve.metalbroker.service.impl;
++
++import com.hugoserve.metalbroker.domain.entity.MetalEntity;
++import com.hugoserve.metalbroker.domain.repo.MetalRepository;
++import com.hugoserve.metalbroker.service.DbMetalAdminService;
++import jakarta.transaction.Transactional;
++import org.springframework.stereotype.Service;
++
++import org.springframework.cache.annotation.CacheEvict;
++import static com.hugoserve.metalbroker.config.CacheConfig.CACHE_DB_METALS;
++
++
++import java.util.Optional;
++
++@Service
++public class DbMetalAdminServiceImpl implements DbMetalAdminService {
++
++    private final MetalRepository metalRepo;
++
++    public DbMetalAdminServiceImpl(MetalRepository metalRepo) {
++        this.metalRepo = metalRepo;
++    }
++
++    @Override
++    @Transactional
++    @CacheEvict(cacheNames = CACHE_DB_METALS, allEntries = true)
++    public MetalEntity upsert(String code, String name, boolean isActive) {
++        String upper = code.toUpperCase();
++        MetalEntity e = metalRepo.findByCode(upper).orElseGet(MetalEntity::new);
++        e.setCode(upper);
++        e.setName(name);
++        e.setActive(isActive);
++        return metalRepo.save(e);
++    }
++
++    @Override
++    @Transactional
++    @CacheEvict(cacheNames = CACHE_DB_METALS, allEntries = true)
++    public Optional<MetalEntity> update(String code, String nameOrNull, Boolean isActiveOrNull) {
++        return metalRepo.findByCode(code.toUpperCase()).map(e -> {
++            if (nameOrNull != null && !nameOrNull.isBlank()) e.setName(nameOrNull);
++            if (isActiveOrNull != null) e.setActive(isActiveOrNull);
++            return metalRepo.save(e);
++        });
++    }
++
++    @Override
++    @Transactional
++    @CacheEvict(cacheNames = CACHE_DB_METALS, allEntries = true)
++    public Optional<MetalEntity> deactivate(String code) {
++        return metalRepo.findByCode(code.toUpperCase()).map(e -> {
++            e.setActive(false);
++            return metalRepo.save(e);
++        });
++    }
++}
+Index: src/main/java/com/hugoserve/metalbroker/security/AuthService.java
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/src/main/java/com/hugoserve/metalbroker/security/AuthService.java b/src/main/java/com/hugoserve/metalbroker/security/AuthService.java
+new file mode 100644
+--- /dev/null	(date 1769493932492)
++++ b/src/main/java/com/hugoserve/metalbroker/security/AuthService.java	(date 1769493932492)
+@@ -0,0 +1,160 @@
++package com.hugoserve.metalbroker.security;
++
++import com.hugoserve.metalbroker.domain.entity.UserEntity;
++import com.hugoserve.metalbroker.proto.MetalRatesProto.*;
++import com.hugoserve.metalbroker.domain.repo.UserRepository;
++import com.hugoserve.metalbroker.utils.*;
++import com.google.protobuf.util.Timestamps;
++import lombok.RequiredArgsConstructor;
++import org.springframework.http.ResponseEntity;
++import org.springframework.security.authentication.AuthenticationManager;
++import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
++import org.springframework.security.crypto.password.PasswordEncoder;
++import org.springframework.stereotype.Service;
++import org.springframework.web.bind.annotation.*;
++
++@Service
++@RequiredArgsConstructor
++public class AuthService {
++
++    private final UserRepository userRepository;
++    private final PasswordEncoder passwordEncoder;
++    private final JwtService jwtService;
++    private final AuthenticationManager authenticationManager;
++
++    public ResponseEntity<String> register(RegisterRequest request) {
++
++        String email = request.getEmail() == null ? "" : request.getEmail().trim();
++        String password = request.getPassword() == null ? "" : request.getPassword();
++
++        if (email.isEmpty())
++            return badRequest("Email must not be empty");
++
++        if (!email.matches("^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,6}$"))
++            return badRequest("Invalid email format");
++
++        if (password.length() < 6)
++            return badRequest("Password must be at least 6 chars");
++
++        if (userRepository.findByEmail(email).isPresent())
++            return badRequest("Email exists");
++
++        UserEntity user = UserEntity.builder()
++                .email(email)
++                .password(passwordEncoder.encode(password))
++                .role(UserRole.USER)
++                .build();
++
++        String access = jwtService.generateAccessToken(user);
++        String refresh = jwtService.generateRefreshToken(user);
++        user.setCurrentRefreshToken(refresh);
++
++        userRepository.save(user);
++
++        return ResponseEntity.ok(
++                ProtoJson.print(success(user, access, refresh))
++        );
++    }
++
++    public ResponseEntity<String> login(LoginRequest request) {
++        try {
++            authenticationManager.authenticate(
++                    new UsernamePasswordAuthenticationToken(
++                            request.getEmail(), request.getPassword()
++                    )
++            );
++        } catch (Exception e) {
++            return unauthorized("Invalid email or password");
++        }
++
++        UserEntity user = userRepository.findByEmail(request.getEmail()).orElseThrow();
++
++        String access = jwtService.generateAccessToken(user);
++        String refresh = jwtService.generateRefreshToken(user);
++        user.setCurrentRefreshToken(refresh);
++        userRepository.save(user);
++
++        return ResponseEntity.ok(
++                ProtoJson.print(success(user, access, refresh))
++        );
++    }
++
++    public ResponseEntity<String> refresh(RefreshTokenRequest request) {
++
++        String token = request.getRefreshToken();
++
++        String email;
++        try {
++            email = jwtService.extractUsername(token);
++        } catch (Exception e) {
++            return sessionExpired();
++        }
++
++        UserEntity user = userRepository.findByEmail(email).orElse(null);
++        if (user == null) return sessionExpired();
++
++        if (!token.equals(user.getCurrentRefreshToken())) {
++            return sessionExpired();
++        }
++
++        if (!jwtService.isTokenValid(token, user)) {
++            return sessionExpired();
++        }
++
++        String newAccess = jwtService.generateAccessToken(user);
++
++        return ResponseEntity.ok(
++                ProtoJson.print(
++                        success(user, newAccess, user.getCurrentRefreshToken())
++                )
++        );
++    }
++
++    private ResponseEntity<String> sessionExpired() {
++        return ResponseEntity.ok(
++                ProtoJson.print(
++                        AuthResponse.newBuilder()
++                                .setSuccess(false)
++                                .setMessage("Session expired, please login")
++                                .build()
++                )
++        );
++    }
++
++
++    // ---------------- helpers ----------------
++
++    private AuthResponse success(UserEntity user, String access, String refresh) {
++        long now = System.currentTimeMillis();
++        return AuthResponse.newBuilder()
++                .setSuccess(true)
++                .setRole(user.getRole())
++                .setTokens(TokenPair.newBuilder()
++                        .setAccessToken(access)
++                        .setRefreshToken(refresh)
++                        .setAccessExpiresAt(
++                                Timestamps.fromMillis(now + JwtService.ACCESS_EXPIRY))
++                        .setRefreshExpiresAt(
++                                Timestamps.fromMillis(now + JwtService.REFRESH_EXPIRY))
++                        .build())
++                .build();
++    }
++
++    private ResponseEntity<String> badRequest(String msg) {
++        return ResponseEntity.ok(
++                ProtoJson.print(AuthResponse.newBuilder()
++                        .setSuccess(false)
++                        .setMessage(msg)
++                        .build())
++        );
++    }
++
++    private ResponseEntity<String> unauthorized(String msg) {
++        return ResponseEntity.ok(
++                ProtoJson.print(AuthResponse.newBuilder()
++                        .setSuccess(false)
++                        .setMessage(msg)
++                        .build())
++        );
++    }
++}
+Index: src/main/java/com/hugoserve/metalbroker/controller/internal/DbMetalAdminController.java
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/src/main/java/com/hugoserve/metalbroker/controller/internal/DbMetalAdminController.java b/src/main/java/com/hugoserve/metalbroker/controller/internal/DbMetalAdminController.java
+new file mode 100644
+--- /dev/null	(date 1769146514369)
++++ b/src/main/java/com/hugoserve/metalbroker/controller/internal/DbMetalAdminController.java	(date 1769146514369)
+@@ -0,0 +1,33 @@
++package com.hugoserve.metalbroker.controller.internal; // (move out of .controller.db)
++
++import com.hugoserve.metalbroker.facade.DbMetalAdminFacade;
++import org.springframework.http.MediaType;
++import org.springframework.http.ResponseEntity;
++import org.springframework.web.bind.annotation.*;
++
++
++@RestController
++@RequestMapping("/api/v1/db/admin/metals")
++public class DbMetalAdminController {
++
++    private final DbMetalAdminFacade facade;
++
++    public DbMetalAdminController(DbMetalAdminFacade facade) {
++        this.facade = facade;
++    }
++
++    @PostMapping(consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
++    public ResponseEntity<String> create(@RequestBody String json) throws Exception {
++        return facade.create(json);
++    }
++
++    @PutMapping(value="/{code}", consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
++    public ResponseEntity<String> update(@PathVariable String code, @RequestBody String json) throws Exception {
++        return facade.update(code, json);
++    }
++
++    @DeleteMapping(value="/{code}", produces = MediaType.APPLICATION_JSON_VALUE)
++    public ResponseEntity<String> deactivate(@PathVariable String code) {
++        return facade.deactivate(code);
++    }
++}
+Index: src/main/java/com/hugoserve/metalbroker/facade/AuthFacade.java
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/src/main/java/com/hugoserve/metalbroker/facade/AuthFacade.java b/src/main/java/com/hugoserve/metalbroker/facade/AuthFacade.java
+new file mode 100644
+--- /dev/null	(date 1769488726560)
++++ b/src/main/java/com/hugoserve/metalbroker/facade/AuthFacade.java	(date 1769488726560)
+@@ -0,0 +1,36 @@
++package com.hugoserve.metalbroker.facade;
++
++import com.hugoserve.metalbroker.security.AuthService;
++import com.hugoserve.metalbroker.proto.MetalRatesProto.*;
++import com.hugoserve.metalbroker.utils.*;
++
++import lombok.RequiredArgsConstructor;
++
++import org.springframework.http.ResponseEntity;
++import org.springframework.stereotype.Component;
++import org.springframework.web.bind.annotation.*;
++
++@Component
++@RequiredArgsConstructor
++public class AuthFacade {
++
++    private final AuthService authService;
++
++    public ResponseEntity<String> register(String body) {
++        RegisterRequest req =
++                ProtoJsonParser.parse(body, RegisterRequest.newBuilder()).build();
++        return authService.register(req);
++    }
++
++    public ResponseEntity<String> login(String body) {
++        LoginRequest req =
++                ProtoJsonParser.parse(body, LoginRequest.newBuilder()).build();
++        return authService.login(req);
++    }
++
++    public ResponseEntity<String> refresh(String body) {
++        RefreshTokenRequest req =
++                ProtoJsonParser.parse(body, RefreshTokenRequest.newBuilder()).build();
++        return authService.refresh(req);
++    }
++}
+Index: src/main/java/com/hugoserve/metalbroker/service/DbMetalReadService.java
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/src/main/java/com/hugoserve/metalbroker/service/DbMetalReadService.java b/src/main/java/com/hugoserve/metalbroker/service/DbMetalReadService.java
+new file mode 100644
+--- /dev/null	(date 1769076987723)
++++ b/src/main/java/com/hugoserve/metalbroker/service/DbMetalReadService.java	(date 1769076987723)
+@@ -0,0 +1,11 @@
++package com.hugoserve.metalbroker.service;
++
++import com.hugoserve.metalbroker.domain.entity.MetalEntity;
++
++import java.util.List;
++import java.util.Optional;
++
++public interface DbMetalReadService {
++    List<MetalEntity> listAll();
++    Optional<MetalEntity> getByCode(String code);
++}
+Index: src/main/java/com/hugoserve/metalbroker/service/impl/DbMetalReadServiceImpl.java
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/src/main/java/com/hugoserve/metalbroker/service/impl/DbMetalReadServiceImpl.java b/src/main/java/com/hugoserve/metalbroker/service/impl/DbMetalReadServiceImpl.java
+new file mode 100644
+--- /dev/null	(date 1769146104625)
++++ b/src/main/java/com/hugoserve/metalbroker/service/impl/DbMetalReadServiceImpl.java	(date 1769146104625)
+@@ -0,0 +1,35 @@
++package com.hugoserve.metalbroker.service.impl;
++
++import com.hugoserve.metalbroker.domain.entity.MetalEntity;
++import com.hugoserve.metalbroker.domain.repo.MetalRepository;
++import com.hugoserve.metalbroker.service.DbMetalReadService;
++import org.springframework.stereotype.Service;
++
++import org.springframework.cache.annotation.Cacheable;
++import static com.hugoserve.metalbroker.config.CacheConfig.CACHE_DB_METALS;
++
++
++import java.util.List;
++import java.util.Optional;
++
++@Service
++public class DbMetalReadServiceImpl implements DbMetalReadService {
++
++    private final MetalRepository metalRepo;
++
++    public DbMetalReadServiceImpl(MetalRepository metalRepo) {
++        this.metalRepo = metalRepo;
++    }
++
++    @Override
++    @Cacheable(cacheNames = CACHE_DB_METALS, key = "'all'")
++    public List<MetalEntity> listAll() {
++        return metalRepo.findAll();
++    }
++
++    @Override
++    @Cacheable(cacheNames = CACHE_DB_METALS, key = "#code.trim().toUpperCase()")
++    public Optional<MetalEntity> getByCode(String code) {
++        return metalRepo.findByCode(code.toUpperCase());
++    }
++}
+Index: src/main/java/com/hugoserve/metalbroker/service/impl/DbHistoryAdminServiceImpl.java
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/src/main/java/com/hugoserve/metalbroker/service/impl/DbHistoryAdminServiceImpl.java b/src/main/java/com/hugoserve/metalbroker/service/impl/DbHistoryAdminServiceImpl.java
+new file mode 100644
+--- /dev/null	(date 1769076458497)
++++ b/src/main/java/com/hugoserve/metalbroker/service/impl/DbHistoryAdminServiceImpl.java	(date 1769076458497)
+@@ -0,0 +1,106 @@
++package com.hugoserve.metalbroker.service.impl;
++
++import com.hugoserve.metalbroker.domain.entity.MetalDailyHistoryEntity;
++import com.hugoserve.metalbroker.domain.entity.MetalEntity;
++import com.hugoserve.metalbroker.domain.repo.MetalDailyHistoryRepository;
++import com.hugoserve.metalbroker.domain.repo.MetalRepository;
++import com.hugoserve.metalbroker.service.DbHistoryAdminService;
++import jakarta.transaction.Transactional;
++import org.springframework.stereotype.Service;
++
++import java.math.BigDecimal;
++import java.time.LocalDate;
++import java.util.List;
++
++@Service
++public class DbHistoryAdminServiceImpl implements DbHistoryAdminService {
++
++    private final MetalRepository metalRepo;
++    private final MetalDailyHistoryRepository historyRepo;
++
++    public DbHistoryAdminServiceImpl(MetalRepository metalRepo, MetalDailyHistoryRepository historyRepo) {
++        this.metalRepo = metalRepo;
++        this.historyRepo = historyRepo;
++    }
++
++    private MetalEntity requireMetal(String metalCode) {
++        return metalRepo.findByCode(metalCode.toUpperCase())
++                .orElseThrow(() -> new IllegalArgumentException("Unknown metal code: " + metalCode));
++    }
++
++    private static BigDecimal bd(double v) { return BigDecimal.valueOf(v); }
++
++    @Override
++    @Transactional
++    public MetalDailyHistoryEntity upsertOne(String metalCode, LocalDate dayUtc,
++                                             double open, double high, double low, double close,
++                                             Double ma50OrNull, Double ma200OrNull,
++                                             String sourceOrNull) {
++
++        MetalEntity metal = requireMetal(metalCode);
++
++        MetalDailyHistoryEntity e = historyRepo.findByMetal_IdAndDayUtc(metal.getId(), dayUtc)
++                .orElseGet(MetalDailyHistoryEntity::new);
++
++        e.setMetal(metal);
++        e.setDayUtc(dayUtc);
++        e.setOpen(bd(open));
++        e.setHigh(bd(high));
++        e.setLow(bd(low));
++        e.setClose(bd(close));
++
++        if (ma50OrNull != null) e.setMa50(bd(ma50OrNull));
++        if (ma200OrNull != null) e.setMa200(bd(ma200OrNull));
++
++        if (sourceOrNull != null && !sourceOrNull.isBlank()) e.setSource(sourceOrNull);
++
++        return historyRepo.save(e);
++    }
++
++    @Override
++    @Transactional
++    public int upsertBulk(String metalCode, List<CandleInput> candles) {
++        MetalEntity metal = requireMetal(metalCode);
++
++        int affected = 0;
++        for (CandleInput it : candles) {
++            if (it.dayUtc() == null) continue;
++
++            MetalDailyHistoryEntity e = historyRepo.findByMetal_IdAndDayUtc(metal.getId(), it.dayUtc())
++                    .orElseGet(MetalDailyHistoryEntity::new);
++
++            e.setMetal(metal);
++            e.setDayUtc(it.dayUtc());
++            e.setOpen(bd(it.open()));
++            e.setHigh(bd(it.high()));
++            e.setLow(bd(it.low()));
++            e.setClose(bd(it.close()));
++            if (it.ma50() != null) e.setMa50(bd(it.ma50()));
++            if (it.ma200() != null) e.setMa200(bd(it.ma200()));
++            if (it.source() != null && !it.source().isBlank()) e.setSource(it.source());
++
++            historyRepo.save(e);
++            affected++;
++        }
++        return affected;
++    }
++
++    @Override
++    @Transactional
++    public boolean deleteOne(String metalCode, LocalDate dayUtc) {
++        MetalEntity metal = requireMetal(metalCode);
++        var row = historyRepo.findByMetal_IdAndDayUtc(metal.getId(), dayUtc).orElse(null);
++        if (row == null) return false;
++        historyRepo.delete(row);
++        return true;
++    }
++
++    @Override
++    @Transactional
++    public int deleteRange(String metalCode, LocalDate fromDay, LocalDate toDay) {
++        MetalEntity metal = requireMetal(metalCode);
++        var rows = historyRepo.findByMetal_IdAndDayUtcBetweenOrderByDayUtcAsc(metal.getId(), fromDay, toDay);
++        historyRepo.deleteAll(rows);
++        return rows.size();
++    }
++}
+Index: src/main/java/com/hugoserve/metalbroker/facade/DbHistoryAdminFacade.java
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/src/main/java/com/hugoserve/metalbroker/facade/DbHistoryAdminFacade.java b/src/main/java/com/hugoserve/metalbroker/facade/DbHistoryAdminFacade.java
+new file mode 100644
+--- /dev/null	(date 1769491064507)
++++ b/src/main/java/com/hugoserve/metalbroker/facade/DbHistoryAdminFacade.java	(date 1769491064507)
+@@ -0,0 +1,126 @@
++package com.hugoserve.metalbroker.facade;
++
++import com.hugoserve.metalbroker.domain.entity.MetalDailyHistoryEntity;
++import com.hugoserve.metalbroker.proto.MetalRatesProto;
++import com.hugoserve.metalbroker.service.DbHistoryAdminService;
++import com.hugoserve.metalbroker.utils.DbProtoMapper;
++import com.hugoserve.metalbroker.utils.ProtoJson;
++import com.hugoserve.metalbroker.utils.ProtoJsonParser;
++import org.springframework.http.HttpStatus;
++import org.springframework.http.ResponseEntity;
++import org.springframework.stereotype.Component;
++
++import java.time.LocalDate;
++import java.util.List;
++
++@Component
++public class DbHistoryAdminFacade {
++
++    private final DbHistoryAdminService service;
++    private final DbProtoMapper mapper;
++
++    public DbHistoryAdminFacade(DbHistoryAdminService service, DbProtoMapper mapper) {
++        this.service = service;
++        this.mapper = mapper;
++    }
++
++    public ResponseEntity<String> upsertOne(String json) {
++        MetalRatesProto.DailyHistoryCandle req;
++        try {
++            req = ProtoJsonParser.parse(json, MetalRatesProto.DailyHistoryCandle.newBuilder()).build();
++        } catch (RuntimeException ex) {
++            return ResponseEntity.badRequest().body("{\"error\":\"invalid proto json\"}");
++        }
++
++        if (req.getMetal() == MetalRatesProto.Metal.METAL_UNSPECIFIED) {
++            return ResponseEntity.badRequest().body("{\"error\":\"metal must be XAU/XAG/XPD/XPT\"}");
++        }
++        if (req.getDayUtc().isEmpty()) {
++            return ResponseEntity.badRequest().body("{\"error\":\"dayUtc is required\"}");
++        }
++
++        String metalCode = req.getMetal().name();
++        LocalDate day = LocalDate.parse(req.getDayUtc());
++
++        Double ma50 = req.hasMa50() ? req.getMa50() : null;
++        Double ma200 = req.hasMa200() ? req.getMa200() : null;
++
++        MetalDailyHistoryEntity saved = service.upsertOne(
++                metalCode, day,
++                req.getOpen(), req.getHigh(), req.getLow(), req.getClose(),
++                ma50, ma200,
++                req.getSource().isEmpty() ? null : req.getSource()
++        );
++
++        return ResponseEntity.ok(ProtoJson.print(mapper.dailyHistoryCandle(saved)));
++    }
++
++    public ResponseEntity<String> upsertBulk(String json) {
++        MetalRatesProto.DailyHistoryList req;
++        try {
++            req = ProtoJsonParser.parse(json, MetalRatesProto.DailyHistoryList.newBuilder()).build();
++        } catch (RuntimeException ex) {
++            return ResponseEntity.badRequest().body("{\"error\":\"invalid proto json\"}");
++        }
++
++        if (req.getMetal() == MetalRatesProto.Metal.METAL_UNSPECIFIED) {
++            return ResponseEntity.badRequest().body("{\"error\":\"metal required in DailyHistoryList\"}");
++        }
++
++        String metalCode = req.getMetal().name();
++
++        List<DbHistoryAdminService.CandleInput> candles = req.getItemsList().stream()
++                .filter(it -> !it.getDayUtc().isEmpty())
++                .map(it -> new DbHistoryAdminService.CandleInput(
++                        LocalDate.parse(it.getDayUtc()),
++                        it.getOpen(), it.getHigh(), it.getLow(), it.getClose(),
++                        it.hasMa50() ? it.getMa50() : null,
++                        it.hasMa200() ? it.getMa200() : null,
++                        it.getSource()
++                ))
++                .toList();
++
++        int affected = service.upsertBulk(metalCode, candles);
++
++        var resp = MetalRatesProto.AdminWriteResult.newBuilder()
++                .setOk(true)
++                .setMessage("bulk upsert completed")
++                .setAffected(affected)
++                .build();
++
++        return ResponseEntity.ok(ProtoJson.print(resp));
++    }
++
++    public ResponseEntity<String> deleteOne(String metal, LocalDate day) {
++        boolean ok = service.deleteOne(metal, day);
++
++        if (!ok) {
++            var errorResp = MetalRatesProto.AdminWriteResult.newBuilder()
++                    .setOk(false)
++                    .setMessage("not found any entry of " + day + " of the " + metal)
++                    .build();
++
++            // Returns 404 status with the JSON error message
++            return ResponseEntity.ok(ProtoJson.print(errorResp));
++        }
++
++        var resp = MetalRatesProto.AdminWriteResult.newBuilder()
++                .setOk(true)
++                .setMessage("deleted day=" + day)
++                .build();
++
++        return ResponseEntity.ok(ProtoJson.print(resp));
++    }
++
++    public ResponseEntity<String> deleteRange(String metal, LocalDate fromDay, LocalDate toDay) {
++        int deleted = service.deleteRange(metal, fromDay, toDay);
++
++        var resp = MetalRatesProto.AdminWriteResult.newBuilder()
++                .setOk(true)
++                .setMessage("deleted=" + deleted)
++                .setAffected(deleted)
++                .build();
++
++        return ResponseEntity.ok(ProtoJson.print(resp));
++    }
++}
+Index: src/main/java/com/hugoserve/metalbroker/facade/DbTicksAdminFacade.java
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/src/main/java/com/hugoserve/metalbroker/facade/DbTicksAdminFacade.java b/src/main/java/com/hugoserve/metalbroker/facade/DbTicksAdminFacade.java
+new file mode 100644
+--- /dev/null	(date 1769076097340)
++++ b/src/main/java/com/hugoserve/metalbroker/facade/DbTicksAdminFacade.java	(date 1769076097340)
+@@ -0,0 +1,121 @@
++package com.hugoserve.metalbroker.facade;
++
++import com.hugoserve.metalbroker.domain.entity.SpotTick5mEntity;
++import com.hugoserve.metalbroker.proto.MetalRatesProto;
++import com.hugoserve.metalbroker.service.DbTicksAdminService;
++import com.hugoserve.metalbroker.utils.DbProtoMapper;
++import com.hugoserve.metalbroker.utils.ProtoJson;
++import com.hugoserve.metalbroker.utils.ProtoJsonParser;
++import org.springframework.http.ResponseEntity;
++import org.springframework.stereotype.Component;
++
++import java.time.Instant;
++import java.util.Comparator;
++
++@Component
++public class DbTicksAdminFacade {
++
++    private final DbTicksAdminService service;
++    private final DbProtoMapper mapper;
++
++    public DbTicksAdminFacade(DbTicksAdminService service, DbProtoMapper mapper) {
++        this.service = service;
++        this.mapper = mapper;
++    }
++
++    private Instant toInstant(MetalRatesProto.Tick5m p) {
++        return Instant.ofEpochSecond(p.getTsUtc().getSeconds(), p.getTsUtc().getNanos());
++    }
++
++    public ResponseEntity<String> upsertOne(String json) {
++        MetalRatesProto.Tick5m req;
++        try {
++            req = ProtoJsonParser.parse(json, MetalRatesProto.Tick5m.newBuilder()).build();
++        } catch (RuntimeException ex) {
++            return ResponseEntity.badRequest().body("{\"error\":\"invalid proto json\"}");
++        }
++
++        if (req.getMetal() == MetalRatesProto.Metal.METAL_UNSPECIFIED) {
++            return ResponseEntity.badRequest().body("{\"error\":\"metal must be XAU/XAG/XPD/XPT\"}");
++        }
++        if (!req.hasTsUtc()) {
++            return ResponseEntity.badRequest().body("{\"error\":\"tsUtc is required\"}");
++        }
++
++        String metalCode = req.getMetal().name();
++        Instant ts = toInstant(req);
++
++        try {
++            SpotTick5mEntity saved = service.insertTick(
++                    metalCode, ts,
++                    req.getAsk(), req.getMid(), req.getBid(),
++                    req.getValue(), req.getPerformance(),
++                    req.getSource().isEmpty() ? null : req.getSource()
++            );
++            return ResponseEntity.ok(ProtoJson.print(mapper.tick5m(saved)));
++        } catch (Exception dupOrOther) {
++            // keep your "idempotent" behavior
++            return ResponseEntity.ok(ProtoJson.print(req));
++        }
++    }
++
++    public ResponseEntity<String> upsertBulk(String json) {
++        MetalRatesProto.Tick5mList req;
++        try {
++            req = ProtoJsonParser.parse(json, MetalRatesProto.Tick5mList.newBuilder()).build();
++        } catch (RuntimeException ex) {
++            return ResponseEntity.badRequest().body("{\"error\":\"invalid proto json\"}");
++        }
++
++        if (req.getMetal() == MetalRatesProto.Metal.METAL_UNSPECIFIED) {
++            return ResponseEntity.badRequest().body("{\"error\":\"metal required in Tick5mList\"}");
++        }
++
++        String metalCode = req.getMetal().name();
++
++        var ticks = req.getItemsList().stream()
++                .filter(MetalRatesProto.Tick5m::hasTsUtc)
++                .sorted(Comparator.comparing(this::toInstant))
++                .map(it -> new DbTicksAdminService.TickInput(
++                        toInstant(it),
++                        it.getAsk(), it.getMid(), it.getBid(),
++                        it.getValue(), it.getPerformance(),
++                        it.getSource()
++                ))
++                .toList();
++
++        int inserted = service.insertTicksBulk(metalCode, ticks);
++
++        var resp = MetalRatesProto.AdminWriteResult.newBuilder()
++                .setOk(true)
++                .setMessage("bulk upsert completed (duplicates ignored)")
++                .setAffected(inserted)
++                .build();
++
++        return ResponseEntity.ok(ProtoJson.print(resp));
++    }
++
++    public ResponseEntity<String> deleteById(Long id) {
++        boolean ok = service.deleteById(id);
++
++        if (!ok) return ResponseEntity.notFound().build();
++
++        var resp = MetalRatesProto.AdminWriteResult.newBuilder()
++                .setOk(true)
++                .setMessage("deleted id=" + id)
++                .build();
++
++        return ResponseEntity.ok(ProtoJson.print(resp));
++    }
++
++    public ResponseEntity<String> deleteRange(String metal, Instant from, Instant to) {
++        int deleted = service.deleteRange(metal, from, to);
++
++        var resp = MetalRatesProto.AdminWriteResult.newBuilder()
++                .setOk(true)
++                .setMessage("deleted=" + deleted)
++                .build();
++
++        return ResponseEntity.ok(ProtoJson.print(resp));
++    }
++}
+Index: src/main/java/com/hugoserve/metalbroker/service/DbHistoryAdminService.java
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/src/main/java/com/hugoserve/metalbroker/service/DbHistoryAdminService.java b/src/main/java/com/hugoserve/metalbroker/service/DbHistoryAdminService.java
+new file mode 100644
+--- /dev/null	(date 1769076363992)
++++ b/src/main/java/com/hugoserve/metalbroker/service/DbHistoryAdminService.java	(date 1769076363992)
+@@ -0,0 +1,39 @@
++package com.hugoserve.metalbroker.service;
++
++import com.hugoserve.metalbroker.domain.entity.MetalDailyHistoryEntity;
++
++import java.time.LocalDate;
++import java.util.List;
++import java.util.Optional;
++
++public interface DbHistoryAdminService {
++
++    MetalDailyHistoryEntity upsertOne(
++            String metalCode,
++            LocalDate dayUtc,
++            double open,
++            double high,
++            double low,
++            double close,
++            Double ma50OrNull,
++            Double ma200OrNull,
++            String sourceOrNull
++    );
++
++    int upsertBulk(String metalCode, List<CandleInput> candles);
++
++    boolean deleteOne(String metalCode, LocalDate dayUtc);
++
++    int deleteRange(String metalCode, LocalDate fromDay, LocalDate toDay);
++
++    record CandleInput(
++            LocalDate dayUtc,
++            double open,
++            double high,
++            double low,
++            double close,
++            Double ma50,
++            Double ma200,
++            String source
++    ) {}
++}
+Index: src/main/java/com/hugoserve/metalbroker/service/DbTicksAdminService.java
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/src/main/java/com/hugoserve/metalbroker/service/DbTicksAdminService.java b/src/main/java/com/hugoserve/metalbroker/service/DbTicksAdminService.java
+new file mode 100644
+--- /dev/null	(date 1769076030538)
++++ b/src/main/java/com/hugoserve/metalbroker/service/DbTicksAdminService.java	(date 1769076030538)
+@@ -0,0 +1,28 @@
++package com.hugoserve.metalbroker.service;
++
++import com.hugoserve.metalbroker.domain.entity.SpotTick5mEntity;
++
++import java.time.Instant;
++
++public interface DbTicksAdminService {
++    SpotTick5mEntity insertTick(String metalCode, Instant tsUtc,
++                                double ask, double mid, double bid,
++                                double value, double performance,
++                                String sourceOrNull);
++
++    int insertTicksBulk(String metalCode, java.util.List<TickInput> ticks);
++
++    boolean deleteById(long id);
++
++    int deleteRange(String metalCode, Instant from, Instant to);
++
++    record TickInput(
++            Instant tsUtc,
++            double ask,
++            double mid,
++            double bid,
++            double value,
++            double performance,
++            String source
++    ) {}
++}
+Index: src/main/java/com/hugoserve/metalbroker/service/impl/DbTicksAdminServiceImpl.java
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/src/main/java/com/hugoserve/metalbroker/service/impl/DbTicksAdminServiceImpl.java b/src/main/java/com/hugoserve/metalbroker/service/impl/DbTicksAdminServiceImpl.java
+new file mode 100644
+--- /dev/null	(date 1769076071283)
++++ b/src/main/java/com/hugoserve/metalbroker/service/impl/DbTicksAdminServiceImpl.java	(date 1769076071283)
+@@ -0,0 +1,98 @@
++package com.hugoserve.metalbroker.service.impl;
++
++import com.hugoserve.metalbroker.domain.entity.MetalEntity;
++import com.hugoserve.metalbroker.domain.entity.SpotTick5mEntity;
++import com.hugoserve.metalbroker.domain.repo.MetalRepository;
++import com.hugoserve.metalbroker.domain.repo.SpotTick5mRepository;
++import com.hugoserve.metalbroker.service.DbTicksAdminService;
++import jakarta.transaction.Transactional;
++import org.springframework.stereotype.Service;
++
++import java.math.BigDecimal;
++import java.time.Instant;
++import java.util.List;
++
++@Service
++public class DbTicksAdminServiceImpl implements DbTicksAdminService {
++
++    private final MetalRepository metalRepo;
++    private final SpotTick5mRepository tickRepo;
++
++    public DbTicksAdminServiceImpl(MetalRepository metalRepo, SpotTick5mRepository tickRepo) {
++        this.metalRepo = metalRepo;
++        this.tickRepo = tickRepo;
++    }
++
++    private MetalEntity requireMetal(String metalCode) {
++        return metalRepo.findByCode(metalCode.toUpperCase())
++                .orElseThrow(() -> new IllegalArgumentException("Unknown metal code: " + metalCode));
++    }
++
++    private static BigDecimal bd(double v) { return BigDecimal.valueOf(v); }
++
++    @Override
++    @Transactional
++    public SpotTick5mEntity insertTick(String metalCode, Instant tsUtc,
++                                       double ask, double mid, double bid,
++                                       double value, double performance,
++                                       String sourceOrNull) {
++
++        MetalEntity metal = requireMetal(metalCode);
++
++        SpotTick5mEntity e = new SpotTick5mEntity();
++        e.setMetal(metal);
++        e.setTsUtc(tsUtc);
++        e.setAsk(bd(ask));
++        e.setMid(bd(mid));
++        e.setBid(bd(bid));
++        e.setValue(bd(value));
++        e.setPerformance(bd(performance));
++        if (sourceOrNull != null && !sourceOrNull.isBlank()) e.setSource(sourceOrNull);
++
++        return tickRepo.save(e); // may throw duplicate constraint
++    }
++
++    @Override
++    @Transactional
++    public int insertTicksBulk(String metalCode, List<TickInput> ticks) {
++        MetalEntity metal = requireMetal(metalCode);
++
++        int inserted = 0;
++        for (TickInput it : ticks) {
++            if (it.tsUtc() == null) continue;
++
++            SpotTick5mEntity e = new SpotTick5mEntity();
++            e.setMetal(metal);
++            e.setTsUtc(it.tsUtc());
++            e.setAsk(bd(it.ask()));
++            e.setMid(bd(it.mid()));
++            e.setBid(bd(it.bid()));
++            e.setValue(bd(it.value()));
++            e.setPerformance(bd(it.performance()));
++            if (it.source() != null && !it.source().isBlank()) e.setSource(it.source());
++
++            try {
++                tickRepo.save(e);
++                inserted++;
++            } catch (Exception ignored) {
++                // duplicates ignored
++            }
++        }
++        return inserted;
++    }
++
++    @Override
++    @Transactional
++    public boolean deleteById(long id) {
++        if (!tickRepo.existsById(id)) return false;
++        tickRepo.deleteById(id);
++        return true;
++    }
++
++    @Override
++    @Transactional
++    public int deleteRange(String metalCode, Instant from, Instant to) {
++        MetalEntity metal = requireMetal(metalCode);
++        return tickRepo.deleteByMetalAndTsRange(metal.getId(), from, to);
++    }
++}
+Index: src/main/resources/db/migration/V2__Metals.sql
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/src/main/resources/db/migration/V2__Metals.sql b/src/main/resources/db/migration/V2__Metals.sql
+new file mode 100644
+--- /dev/null	(date 1768796597175)
++++ b/src/main/resources/db/migration/V2__Metals.sql	(date 1768796597175)
+@@ -0,0 +1,6 @@
++INSERT INTO metals(code, name) VALUES
++                                   ('XAU','Gold'),
++                                   ('XAG','Silver'),
++                                   ('XPT','Platinum'),
++                                   ('XPD','Palladium')
++    ON DUPLICATE KEY UPDATE name=VALUES(name);
+Index: src/main/java/com/hugoserve/metalbroker/service/impl/RateServiceImpl.java
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/src/main/java/com/hugoserve/metalbroker/service/impl/RateServiceImpl.java b/src/main/java/com/hugoserve/metalbroker/service/impl/RateServiceImpl.java
+new file mode 100644
+--- /dev/null	(date 1768904414487)
++++ b/src/main/java/com/hugoserve/metalbroker/service/impl/RateServiceImpl.java	(date 1768904414487)
+@@ -0,0 +1,100 @@
++package com.hugoserve.metalbroker.service.impl;
++
++import com.google.protobuf.util.JsonFormat;
++import com.hugoserve.metalbroker.proto.MetalRatesProto;
++import com.hugoserve.metalbroker.proto.MetalRatesProto.Currency;
++import com.hugoserve.metalbroker.proto.MetalRatesProto.Metal;
++import com.hugoserve.metalbroker.proto.MetalRatesProto.WeightUnit;
++import com.hugoserve.metalbroker.service.RateService;
++import org.springframework.beans.factory.annotation.Value;
++import org.springframework.stereotype.Service;
++import org.springframework.web.client.RestTemplate;
++import org.springframework.web.util.UriComponentsBuilder;
++
++@Service
++public class RateServiceImpl implements RateService {
++
++    private final RestTemplate restTemplate;
++    private final String baseUrl;
++
++    public RateServiceImpl(
++            RestTemplate restTemplate,
++            @Value("${metalbroker.feed.base-url:https://goldbroker.com/api}") String baseUrl
++    ) {
++        this.restTemplate = restTemplate;
++        this.baseUrl = baseUrl;
++    }
++
++    @Override
++    public MetalRatesProto.SpotPrice getLiveRate(Metal metal, Currency currency, WeightUnit weightUnit) {
++        String url = UriComponentsBuilder.fromUriString(baseUrl + "/spot-price")
++                .queryParam("metal", metal.name())
++                .queryParam("currency", currency.name())
++                .queryParam("weight_unit", weightUnit.name().toLowerCase())
++                .toUriString();
++
++        String json = restTemplate.getForObject(url, String.class);
++
++        try {
++            var builder = MetalRatesProto.SpotPrice.newBuilder();
++            JsonFormat.parser().ignoringUnknownFields().merge(json, builder);
++            return builder.build();
++        } catch (Exception e) {
++            throw new RuntimeException("Failed to parse live rate response", e);
++        }
++    }
++
++    @Override
++    public MetalRatesProto.SpotPricesResponse getTodayRates(
++            Metal metal,
++            Currency currency,
++            WeightUnit weightUnit,
++            Integer page,
++            Integer limit
++    ) {
++        UriComponentsBuilder b = UriComponentsBuilder.fromUriString(baseUrl + "/spot-prices")
++                .queryParam("metal", metal.name())
++                .queryParam("currency", currency.name())
++                .queryParam("weight_unit", weightUnit.name().toLowerCase());
++
++        if (page != null) b.queryParam("page", page);
++        if (limit != null) b.queryParam("limit", limit);
++
++        String json = restTemplate.getForObject(b.toUriString(), String.class);
++
++        try {
++            var builder = MetalRatesProto.SpotPricesResponse.newBuilder();
++            JsonFormat.parser().ignoringUnknownFields().merge(json, builder);
++            return builder.build();
++        } catch (Exception e) {
++            throw new RuntimeException("Failed to parse today's response", e);
++        }
++    }
++
++    @Override
++    public MetalRatesProto.HistoricalSpotPricesResponse getHistoricalRates(
++            Metal metal,
++            Currency currency,
++            WeightUnit weightUnit,
++            Integer page,
++            Integer limit
++    ) {
++        UriComponentsBuilder b = UriComponentsBuilder.fromUriString(baseUrl + "/historical-spot-prices")
++                .queryParam("metal", metal.name())
++                .queryParam("currency", currency.name())
++                .queryParam("weight_unit", weightUnit.name().toLowerCase());
++
++        if (page != null) b.queryParam("page", page);
++        if (limit != null) b.queryParam("limit", limit);
++
++        String json = restTemplate.getForObject(b.toUriString(), String.class);
++
++        try {
++            var builder = MetalRatesProto.HistoricalSpotPricesResponse.newBuilder();
++            JsonFormat.parser().ignoringUnknownFields().merge(json, builder);
++            return builder.build();
++        } catch (Exception e) {
++            throw new RuntimeException("Failed to parse historical response", e);
++        }
++    }
++}
+Index: src/main/resources/db/migration/V1__RatesSchema.sql
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/src/main/resources/db/migration/V1__RatesSchema.sql b/src/main/resources/db/migration/V1__RatesSchema.sql
+new file mode 100644
+--- /dev/null	(date 1768905141685)
++++ b/src/main/resources/db/migration/V1__RatesSchema.sql	(date 1768905141685)
+@@ -0,0 +1,59 @@
++CREATE TABLE IF NOT EXISTS metals (
++                        id BIGINT PRIMARY KEY AUTO_INCREMENT,
++                        code VARCHAR(8) NOT NULL UNIQUE,     -- XAU, XAG, XPT, XPD
++                        name VARCHAR(64) NOT NULL,
++                        is_active BOOLEAN NOT NULL DEFAULT TRUE
++);
++
++-- latest snapshot (API #1)
++CREATE TABLE IF NOT EXISTS metal_latest (
++                              metal_id BIGINT PRIMARY KEY,
++                              feed_ts_utc DATETIME(3) NOT NULL,         -- from API date
++                              captured_at_utc DATETIME(3) NOT NULL,     -- when we fetched
++                              ask DECIMAL(20,6) NULL,
++                              mid DECIMAL(20,6) NULL,
++                              bid DECIMAL(20,6) NULL,
++                              value DECIMAL(20,6) NULL,
++                              performance DECIMAL(20,6) NULL,
++                              source VARCHAR(64) NOT NULL DEFAULT 'goldbroker',
++                              CONSTRAINT fk_latest_metal FOREIGN KEY (metal_id) REFERENCES metals(id)
++);
++
++-- intraday 5-min ticks (API #2 _embedded.items)
++CREATE TABLE IF NOT EXISTS spot_ticks_5m (
++                               id BIGINT PRIMARY KEY AUTO_INCREMENT,
++                               metal_id BIGINT NOT NULL,
++                               ts_utc DATETIME(3) NOT NULL,
++                               ask DECIMAL(20,6) NULL,
++                               mid DECIMAL(20,6) NULL,
++                               bid DECIMAL(20,6) NULL,
++                               value DECIMAL(20,6) NULL,
++                               performance DECIMAL(20,6) NULL,
++                               source VARCHAR(64) NOT NULL DEFAULT 'goldbroker',
++                               created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
++
++                               CONSTRAINT fk_tick_metal FOREIGN KEY (metal_id) REFERENCES metals(id),
++                               CONSTRAINT uq_tick UNIQUE (metal_id, ts_utc)
++);
++
++CREATE INDEX  idx_tick_metal_ts ON spot_ticks_5m(metal_id, ts_utc DESC);
++
++-- daily candles (API #3 _embedded.items; also API #2 last_historical_spot_price)
++CREATE TABLE IF NOT EXISTS metal_daily_history (
++                               id BIGINT PRIMARY KEY AUTO_INCREMENT,
++                               metal_id BIGINT NOT NULL,
++                               day_utc DATE NOT NULL,
++                               open DECIMAL(20,6) NOT NULL,
++                               high DECIMAL(20,6) NOT NULL,
++                               low DECIMAL(20,6) NOT NULL,
++                               close DECIMAL(20,6) NOT NULL,
++                               ma50 DECIMAL(20,6) NULL,
++                               ma200 DECIMAL(20,6) NULL,
++                               source VARCHAR(64) NOT NULL DEFAULT 'goldbroker',
++                               created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
++
++                               CONSTRAINT fk_candle_metal FOREIGN KEY (metal_id) REFERENCES metals(id),
++                               CONSTRAINT uq_candle UNIQUE (metal_id, day_utc)
++);
++
++CREATE INDEX idx_history_metal ON metal_daily_history(metal_id, day_utc DESC);
+Index: src/main/java/com/hugoserve/metalbroker/service/RateService.java
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/src/main/java/com/hugoserve/metalbroker/service/RateService.java b/src/main/java/com/hugoserve/metalbroker/service/RateService.java
+new file mode 100644
+--- /dev/null	(date 1768383982963)
++++ b/src/main/java/com/hugoserve/metalbroker/service/RateService.java	(date 1768383982963)
+@@ -0,0 +1,35 @@
++package com.hugoserve.metalbroker.service;
++
++//import com.hugoserve.metalbroker.enums.Currency;
++//import com.hugoserve.metalbroker.enums.Metal;
++//import com.hugoserve.metalbroker.enums.WeightUnit;
++
++import com.hugoserve.metalbroker.proto.MetalRatesProto.Currency;
++import com.hugoserve.metalbroker.proto.MetalRatesProto.Metal;
++import com.hugoserve.metalbroker.proto.MetalRatesProto.WeightUnit;
++import com.hugoserve.metalbroker.proto.MetalRatesProto;
++
++public interface RateService {
++
++    MetalRatesProto.SpotPrice getLiveRate(
++            Metal metal,
++            Currency currency,
++            WeightUnit weightUnit
++    );
++
++    MetalRatesProto.SpotPricesResponse getTodayRates(
++            Metal metal,
++            Currency currency,
++            WeightUnit weightUnit,
++            Integer page,
++            Integer limit
++    );
++
++    MetalRatesProto.HistoricalSpotPricesResponse getHistoricalRates(
++            Metal metal,
++            Currency currency,
++            WeightUnit weightUnit,
++            Integer page,
++            Integer limit
++    );
++}
+Index: src/main/java/com/hugoserve/metalbroker/service/impl/DbRatesReadServiceImpl.java
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/src/main/java/com/hugoserve/metalbroker/service/impl/DbRatesReadServiceImpl.java b/src/main/java/com/hugoserve/metalbroker/service/impl/DbRatesReadServiceImpl.java
+new file mode 100644
+--- /dev/null	(date 1769158027135)
++++ b/src/main/java/com/hugoserve/metalbroker/service/impl/DbRatesReadServiceImpl.java	(date 1769158027135)
+@@ -0,0 +1,80 @@
++package com.hugoserve.metalbroker.service.impl;
++
++import com.hugoserve.metalbroker.domain.entity.MetalEntity;
++import com.hugoserve.metalbroker.domain.entity.MetalDailyHistoryEntity;
++import com.hugoserve.metalbroker.domain.entity.MetalLatestEntity;
++import com.hugoserve.metalbroker.domain.entity.SpotTick5mEntity;
++import com.hugoserve.metalbroker.domain.repo.*;
++import com.hugoserve.metalbroker.service.DbRatesReadService;
++import org.springframework.stereotype.Service;
++import org.springframework.cache.annotation.Cacheable;
++import static com.hugoserve.metalbroker.config.CacheConfig.CACHE_DB_LATEST;
++
++import org.springframework.data.domain.Page;
++import org.springframework.data.domain.Pageable;
++
++
++import java.time.Instant;
++import java.time.LocalDate;
++import java.util.List;
++import java.util.Optional;
++
++@Service
++public class DbRatesReadServiceImpl implements DbRatesReadService {
++
++    private final MetalRepository metalRepo;
++    private final MetalLatestRepository latestRepo;
++    private final SpotTick5mRepository tickRepo;
++    private final MetalDailyHistoryRepository historyRepo;
++
++    public DbRatesReadServiceImpl(MetalRepository metalRepo,
++                                  MetalLatestRepository latestRepo,
++                                  SpotTick5mRepository tickRepo,
++                                  MetalDailyHistoryRepository historyRepo) {
++        this.metalRepo = metalRepo;
++        this.latestRepo = latestRepo;
++        this.tickRepo = tickRepo;
++        this.historyRepo = historyRepo;
++    }
++
++    private Optional<MetalEntity> metal(String metalCode) {
++        return metalRepo.findByCode(metalCode.toUpperCase());
++    }
++
++    @Override
++    @Cacheable(cacheNames = CACHE_DB_LATEST, key = "#metalCode.trim().toUpperCase()")
++    public Optional<MetalLatestEntity> latestByMetalCode(String metalCode) {
++        var m = metal(metalCode).orElse(null);
++        if (m == null) return Optional.empty();
++        return latestRepo.findLatestWithMetal(m.getId()); // keep actual type
++    }
++
++    @Override
++    public List<SpotTick5mEntity> intradayTicks(String metalCode, Instant from, Instant to) {
++        var m = metal(metalCode).orElse(null);
++        if (m == null) return List.of();
++        return tickRepo.findByMetalIdAndTsUtcBetweenFetchMetal(m.getId(), from, to);
++    }
++
++    @Override
++    public List<MetalDailyHistoryEntity> dailyHistory(String metalCode, LocalDate fromDay, LocalDate toDay) {
++        var m = metal(metalCode).orElse(null);
++        if (m == null) return List.of();
++        return historyRepo.findByMetalIdAndDayUtcBetweenFetchMetal(m.getId(), fromDay, toDay);
++    }
++
++    @Override
++    public Page<SpotTick5mEntity> intradayTicksPage(String metalCode, Instant from, Instant to, Pageable pageable) {
++        var m = metal(metalCode).orElse(null);
++        if (m == null) return Page.empty(pageable);
++        return tickRepo.findByMetalIdAndTsUtcBetweenFetchMetalPage(m.getId(), from, to, pageable);
++    }
++
++    @Override
++    public Page<MetalDailyHistoryEntity> dailyHistoryPage(String metalCode, LocalDate fromDay, LocalDate toDay, Pageable pageable) {
++        var m = metal(metalCode).orElse(null);
++        if (m == null) return Page.empty(pageable);
++        return historyRepo.findByMetalIdAndDayUtcBetweenFetchMetalPage(m.getId(), fromDay, toDay, pageable);
++    }
++
++}
+Index: src/main/java/com/hugoserve/metalbroker/facade/DbRatesReadFacade.java
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/src/main/java/com/hugoserve/metalbroker/facade/DbRatesReadFacade.java b/src/main/java/com/hugoserve/metalbroker/facade/DbRatesReadFacade.java
+new file mode 100644
+--- /dev/null	(date 1769160363453)
++++ b/src/main/java/com/hugoserve/metalbroker/facade/DbRatesReadFacade.java	(date 1769160363453)
+@@ -0,0 +1,152 @@
++package com.hugoserve.metalbroker.facade;
++
++import com.hugoserve.metalbroker.proto.MetalRatesProto;
++import com.hugoserve.metalbroker.service.DbRatesReadService;
++import com.hugoserve.metalbroker.utils.DbProtoMapper;
++import com.hugoserve.metalbroker.utils.ProtoJson;
++import org.springframework.http.ResponseEntity;
++import org.springframework.stereotype.Component;
++
++
++import org.springframework.data.domain.Page;
++import org.springframework.data.domain.PageRequest;
++import org.springframework.data.domain.Sort;
++import java.util.Map;
++
++
++import java.time.Instant;
++import java.time.LocalDate;
++
++@Component
++public class DbRatesReadFacade {
++
++    private final DbRatesReadService service;
++    private final DbProtoMapper mapper;
++
++    public DbRatesReadFacade(DbRatesReadService service, DbProtoMapper mapper) {
++        this.service = service;
++        this.mapper = mapper;
++    }
++
++    public ResponseEntity<String> latest(String metal) {
++        return service.latestByMetalCode(metal)
++                .map(e -> ResponseEntity.ok(ProtoJson.print(mapper.latestSnapshot(e))))
++                .orElseGet(() -> ResponseEntity.notFound().build());
++    }
++
++    public ResponseEntity<String> intraday(String metal, Instant from, Instant to) {
++        var items = service.intradayTicks(metal, from, to);
++        if (items.isEmpty()) {
++            // IMPORTANT: if metal code invalid, service returns empty.
++            // If you want strict 404 for unknown metal, we can change service to expose "metal exists" check.
++            // For now: return empty list with metal enum.
++        }
++
++        var b = MetalRatesProto.Tick5mList.newBuilder()
++                .setMetal(mapper.toMetalEnum(metal.toUpperCase()));
++        items.forEach(e -> b.addItems(mapper.tick5m(e)));
++
++        return ResponseEntity.ok(ProtoJson.print(b.build()));
++    }
++
++    public ResponseEntity<String> history(String metal, LocalDate fromDay, LocalDate toDay) {
++        var rows = service.dailyHistory(metal, fromDay, toDay);
++
++        var b = MetalRatesProto.DailyHistoryList.newBuilder()
++                .setMetal(mapper.toMetalEnum(metal.toUpperCase()));
++        rows.forEach(r -> b.addItems(mapper.dailyHistoryCandle(r)));
++
++        return ResponseEntity.ok(ProtoJson.print(b.build()));
++    }
++
++    private void validatePage(int page, int size) {
++        if (page < 0) throw new IllegalArgumentException("page must be >= 0");
++        if (size < 1 || size > 1000) {
++            throw new IllegalArgumentException("size must be between 1 and 1000");
++        }
++    }
++
++    private Sort sort(String field, String dir) {
++        if (field == null || field.isBlank()) return Sort.unsorted();
++        return "desc".equalsIgnoreCase(dir)
++                ? Sort.by(field).descending()
++                : Sort.by(field).ascending();
++    }
++
++    public ResponseEntity<String> intradayPage(String metal,
++                                          Instant from,
++                                          Instant to,
++                                          int page,
++                                          int size,
++                                          String sort,
++                                          String dir) {
++
++        if (from.isAfter(to)) {
++            return ResponseEntity.badRequest().body("from must be <= to");
++        }
++
++        validatePage(page, size);
++
++        PageRequest pr = PageRequest.of(page, size, sort(sort, dir));
++        Page<?> p = service.intradayTicksPage(metal, from, to, pr);
++
++        var b = MetalRatesProto.Tick5mPage.newBuilder()
++                .setMetal(mapper.toMetalEnum(metal.toUpperCase()))
++                .setPage(
++                        MetalRatesProto.PageInfo.newBuilder()
++                                .setPage(p.getNumber())
++                                .setSize(p.getSize())
++                                .setTotalElements(p.getTotalElements())
++                                .setTotalPages(p.getTotalPages())
++                                .build()
++                );
++
++
++        p.getContent().forEach(e ->
++                b.addItems(mapper.tick5m((com.hugoserve.metalbroker.domain.entity.SpotTick5mEntity) e))
++        );
++
++        return ResponseEntity.ok(ProtoJson.print(b.build()));
++
++    }
++
++
++    public ResponseEntity<String> historyPage(String metal,
++                                         LocalDate fromDay,
++                                         LocalDate toDay,
++                                         int page,
++                                         int size,
++                                         String sort,
++                                         String dir) {
++
++        if (fromDay.isAfter(toDay)) {
++            return ResponseEntity.badRequest().body("fromDay must be <= toDay");
++        }
++
++        validatePage(page, size);
++
++        PageRequest pr = PageRequest.of(page, size, sort(sort, dir));
++        Page<?> p = service.dailyHistoryPage(metal, fromDay, toDay, pr);
++
++        var b = MetalRatesProto.DailyHistoryPage.newBuilder()
++                .setMetal(mapper.toMetalEnum(metal.toUpperCase()))
++                .setPage(
++                        MetalRatesProto.PageInfo.newBuilder()
++                                .setPage(p.getNumber())
++                                .setSize(p.getSize())
++                                .setTotalElements(p.getTotalElements())
++                                .setTotalPages(p.getTotalPages())
++                                .build()
++                );
++
++
++        p.getContent().forEach(r ->
++                b.addItems(mapper.dailyHistoryCandle(
++                        (com.hugoserve.metalbroker.domain.entity.MetalDailyHistoryEntity) r))
++        );
++
++        return ResponseEntity.ok(ProtoJson.print(b.build()));
++
++    }
++
++}
+Index: src/main/java/com/hugoserve/metalbroker/controller/RateController.java
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/src/main/java/com/hugoserve/metalbroker/controller/RateController.java b/src/main/java/com/hugoserve/metalbroker/controller/RateController.java
+new file mode 100644
+--- /dev/null	(date 1768818430658)
++++ b/src/main/java/com/hugoserve/metalbroker/controller/RateController.java	(date 1768818430658)
+@@ -0,0 +1,145 @@
++package com.hugoserve.metalbroker.controller;
++
++import com.hugoserve.metalbroker.proto.MetalRatesProto.Currency;
++import com.hugoserve.metalbroker.proto.MetalRatesProto.Metal;
++import com.hugoserve.metalbroker.proto.MetalRatesProto.WeightUnit;
++import com.hugoserve.metalbroker.proto.MetalRatesProto;
++import com.hugoserve.metalbroker.service.RateService;
++
++import com.google.protobuf.util.JsonFormat;
++import com.google.protobuf.InvalidProtocolBufferException;
++
++import com.hugoserve.metalbroker.domain.repo.MetalLatestRepository;
++import com.hugoserve.metalbroker.domain.repo.MetalRepository;
++import com.hugoserve.metalbroker.domain.repo.SpotTick5mRepository;
++
++import org.springframework.http.ResponseEntity;
++import org.springframework.web.bind.annotation.*;
++
++import java.time.Instant;
++
++
++
++
++
++
++
++
++
++
++
++@RestController
++@RequestMapping("/api/v1/rates")
++public class RateController {
++
++    private final RateService rateService;
++    private final MetalRepository metalRepo;
++    private final MetalLatestRepository latestRepo;
++    private final SpotTick5mRepository ticksRepo;
++
++    public RateController(RateService rateService, MetalRepository metalRepo, MetalLatestRepository latestRepo, SpotTick5mRepository ticksRepo) {
++        this.rateService = rateService;
++        this.metalRepo = metalRepo;
++        this.latestRepo = latestRepo;
++        this.ticksRepo = ticksRepo;
++
++    }
++    @GetMapping(value = "/live", produces = "application/x-protobuf")
++    public MetalRatesProto.SpotPrice live(
++            @RequestParam Metal metal,
++            @RequestParam Currency currency,
++            @RequestParam(name = "weight_unit") WeightUnit weightUnit
++    ) {
++        return rateService.getLiveRate(metal, currency, weightUnit);
++    }
++
++    @GetMapping(value = "/live/debug", produces = "application/json")
++    public String liveDebug(
++            @RequestParam Metal metal,
++            @RequestParam Currency currency,
++            @RequestParam(name = "weight_unit") WeightUnit weightUnit
++    ) throws InvalidProtocolBufferException {
++
++        var msg = rateService.getLiveRate(metal, currency, weightUnit);
++        return JsonFormat.printer()
++                .preservingProtoFieldNames()
++                .print(msg);
++    }
++
++
++    @GetMapping(value = "/today", produces = "application/x-protobuf")
++    public MetalRatesProto.SpotPricesResponse today(
++            @RequestParam Metal metal,
++            @RequestParam Currency currency,
++            @RequestParam(name = "weight_unit") WeightUnit weightUnit,
++            @RequestParam(required = false) Integer page,
++            @RequestParam(required = false) Integer limit
++    ) {
++        return rateService.getTodayRates(metal, currency, weightUnit, page, limit);
++    }
++
++    @GetMapping(value = "/today/debug", produces = "application/json")
++    public String todaydebug(
++            @RequestParam Metal metal,
++            @RequestParam Currency currency,
++            @RequestParam(name = "weight_unit") WeightUnit weightUnit,
++            @RequestParam(required = false) Integer page,
++            @RequestParam(required = false) Integer limit
++    ) throws InvalidProtocolBufferException {
++        var msg = rateService.getTodayRates(metal, currency, weightUnit, page, limit);
++
++        return JsonFormat.printer()
++                .includingDefaultValueFields() // included to show market close or open values
++                .preservingProtoFieldNames()
++                .print(msg);
++    }
++
++    @GetMapping(value = "/historical", produces = "application/x-protobuf")
++    public MetalRatesProto.HistoricalSpotPricesResponse historical(
++            @RequestParam Metal metal,
++            @RequestParam Currency currency,
++            @RequestParam(name = "weight_unit") WeightUnit weightUnit,
++            @RequestParam(required = false) Integer page,
++            @RequestParam(required = false) Integer limit
++    ) {
++        return rateService.getHistoricalRates(metal, currency, weightUnit, page, limit);
++    }
++
++    @GetMapping(value = "/historical/debug", produces = "application/json")
++    public String historicaldebug(
++            @RequestParam Metal metal,
++            @RequestParam Currency currency,
++            @RequestParam(name = "weight_unit") WeightUnit weightUnit,
++            @RequestParam(required = false) Integer page,
++            @RequestParam(required = false) Integer limit
++    ) throws InvalidProtocolBufferException {
++        var msg = rateService.getHistoricalRates(metal, currency, weightUnit, page, limit);
++
++        return JsonFormat.printer()
++                .includingDefaultValueFields()
++                .preservingProtoFieldNames()
++                .print(msg);
++    }
++
++
++
++    @GetMapping("/latest")
++    public ResponseEntity<?> latest(@RequestParam String metal) {
++//        var m = metalRepo.findByCode(metal).orElse(null);
++        var m = metalRepo.findByName(metal).orElse(null);
++        if (m == null) return ResponseEntity.notFound().build();
++        return latestRepo.findById(m.getId())
++                .<ResponseEntity<?>>map(ResponseEntity::ok)
++                .orElseGet(() -> ResponseEntity.notFound().build());
++    }
++
++    @GetMapping("/intraday")
++    public ResponseEntity<?> intraday(@RequestParam String metal,
++                                      @RequestParam Instant from,
++                                      @RequestParam Instant to) {
++//        var m = metalRepo.findByCode(metal).orElse(null);
++        var m = metalRepo.findByName(metal).orElse(null);
++        if (m == null) return ResponseEntity.notFound().build();
++        return ResponseEntity.ok(ticksRepo.findByMetal_IdAndTsUtcBetweenOrderByTsUtcAsc(m.getId(), from, to));
++    }
++}
+Index: src/main/java/com/hugoserve/metalbroker/facade/DbMetalReadFacade.java
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/src/main/java/com/hugoserve/metalbroker/facade/DbMetalReadFacade.java b/src/main/java/com/hugoserve/metalbroker/facade/DbMetalReadFacade.java
+new file mode 100644
+--- /dev/null	(date 1769077069001)
++++ b/src/main/java/com/hugoserve/metalbroker/facade/DbMetalReadFacade.java	(date 1769077069001)
+@@ -0,0 +1,32 @@
++package com.hugoserve.metalbroker.facade;
++
++import com.hugoserve.metalbroker.proto.MetalRatesProto;
++import com.hugoserve.metalbroker.service.DbMetalReadService;
++import com.hugoserve.metalbroker.utils.DbProtoMapper;
++import com.hugoserve.metalbroker.utils.ProtoJson;
++import org.springframework.http.ResponseEntity;
++import org.springframework.stereotype.Component;
++
++@Component
++public class DbMetalReadFacade {
++
++    private final DbMetalReadService service;
++    private final DbProtoMapper mapper;
++
++    public DbMetalReadFacade(DbMetalReadService service, DbProtoMapper mapper) {
++        this.service = service;
++        this.mapper = mapper;
++    }
++
++    public String list() {
++        var b = MetalRatesProto.MetalList.newBuilder();
++        service.listAll().forEach(m -> b.addItems(mapper.metalInfo(m)));
++        return ProtoJson.print(b.build());
++    }
++
++    public ResponseEntity<String> getByCode(String code) {
++        return service.getByCode(code)
++                .map(m -> ResponseEntity.ok(ProtoJson.print(mapper.metalInfo(m))))
++                .orElseGet(() -> ResponseEntity.notFound().build());
++    }
++}
+Index: src/main/java/com/hugoserve/metalbroker/service/DbRatesReadService.java
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/src/main/java/com/hugoserve/metalbroker/service/DbRatesReadService.java b/src/main/java/com/hugoserve/metalbroker/service/DbRatesReadService.java
+new file mode 100644
+--- /dev/null	(date 1769157962993)
++++ b/src/main/java/com/hugoserve/metalbroker/service/DbRatesReadService.java	(date 1769157962993)
+@@ -0,0 +1,28 @@
++package com.hugoserve.metalbroker.service;
++
++import com.hugoserve.metalbroker.domain.entity.MetalDailyHistoryEntity;
++import com.hugoserve.metalbroker.domain.entity.SpotTick5mEntity;
++import com.hugoserve.metalbroker.domain.entity.MetalLatestEntity;
++import org.springframework.data.domain.Page;
++import org.springframework.data.domain.Pageable;
++
++import java.time.Instant;
++import java.time.LocalDate;
++import java.util.List;
++import java.util.Optional;
++
++public interface DbRatesReadService {
++
++    // returns latest snapshot row for a metal code (XAU)
++    Optional<MetalLatestEntity> latestByMetalCode(String metalCode);
++
++    // returns ticks for a metal code in range
++    List<SpotTick5mEntity> intradayTicks(String metalCode, Instant from, Instant to);
++
++    // returns daily history rows
++    List<MetalDailyHistoryEntity> dailyHistory(String metalCode, LocalDate fromDay, LocalDate toDay);
++
++    Page<SpotTick5mEntity> intradayTicksPage(String metalCode, Instant from, Instant to, Pageable pageable);
++    Page<MetalDailyHistoryEntity> dailyHistoryPage(String metalCode, LocalDate fromDay, LocalDate toDay, Pageable pageable);
++
++}
+Index: src/main/java/com/hugoserve/metalbroker/domain/entity/MetalLatestEntity.java
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/src/main/java/com/hugoserve/metalbroker/domain/entity/MetalLatestEntity.java b/src/main/java/com/hugoserve/metalbroker/domain/entity/MetalLatestEntity.java
+new file mode 100644
+--- /dev/null	(date 1768997516586)
++++ b/src/main/java/com/hugoserve/metalbroker/domain/entity/MetalLatestEntity.java	(date 1768997516586)
+@@ -0,0 +1,55 @@
++package com.hugoserve.metalbroker.domain.entity;
++
++import jakarta.persistence.*;
++
++import java.math.BigDecimal;
++import java.time.Instant;
++
++@Entity
++@Table(name="metal_latest")
++public class MetalLatestEntity {
++
++    @Id
++    @Column(name="metal_id")
++    private Long metalId;
++
++    @OneToOne(fetch = FetchType.LAZY, optional = false)
++    @MapsId
++    @JoinColumn(name="metal_id")
++    private MetalEntity metal;
++
++    @Column(name="feed_ts_utc", nullable=false)
++    private Instant feedTsUtc;
++
++    @Column(name="captured_at_utc", nullable=false)
++    private Instant capturedAtUtc;
++
++    @Column(precision=20, scale=6) private BigDecimal ask;
++    @Column(precision=20, scale=6) private BigDecimal mid;
++    @Column(precision=20, scale=6) private BigDecimal bid;
++    @Column(precision=20, scale=6) private BigDecimal value;
++    @Column(precision=20, scale=6) private BigDecimal performance;
++
++    @Column(nullable=false, length=64)
++    private String source = "goldbroker";
++
++    public Long getMetalId() { return metalId; }
++    public MetalEntity getMetal() { return metal; }
++    public void setMetal(MetalEntity metal) { this.metal = metal; }
++    public Instant getFeedTsUtc() { return feedTsUtc; }
++    public void setFeedTsUtc(Instant feedTsUtc) { this.feedTsUtc = feedTsUtc; }
++    public Instant getCapturedAtUtc() { return capturedAtUtc; }
++    public void setCapturedAtUtc(Instant capturedAtUtc) { this.capturedAtUtc = capturedAtUtc; }
++    public BigDecimal getAsk() { return ask; }
++    public void setAsk(BigDecimal ask) { this.ask = ask; }
++    public BigDecimal getMid() { return mid; }
++    public void setMid(BigDecimal mid) { this.mid = mid; }
++    public BigDecimal getBid() { return bid; }
++    public void setBid(BigDecimal bid) { this.bid = bid; }
++    public BigDecimal getValue() { return value; }
++    public void setValue(BigDecimal value) { this.value = value; }
++    public BigDecimal getPerformance() { return performance; }
++    public void setPerformance(BigDecimal performance) { this.performance = performance; }
++    public String getSource() { return source; }
++    public void setSource(String source) { this.source = source; }
++}
+Index: src/test/java/com/hugoserve/metalbroker/schedulers/FeedSchedulersTest.java
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/src/test/java/com/hugoserve/metalbroker/schedulers/FeedSchedulersTest.java b/src/test/java/com/hugoserve/metalbroker/schedulers/FeedSchedulersTest.java
+new file mode 100644
+--- /dev/null	(date 1769498383707)
++++ b/src/test/java/com/hugoserve/metalbroker/schedulers/FeedSchedulersTest.java	(date 1769498383707)
+@@ -0,0 +1,36 @@
++package com.hugoserve.metalbroker.schedulers;
++
++import org.junit.jupiter.api.Test;
++import org.springframework.beans.factory.annotation.Autowired;
++import org.springframework.boot.test.context.SpringBootTest;
++
++/**
++ * This test class is used to manually trigger the full data synchronization once.
++ * It loads the entire Spring application context to allow autowiring of services.
++ */
++@SpringBootTest // <-- IMPORTANT: Loads the full Spring context
++class FeedSchedulersTest {
++
++    // Autowire the class containing the @Scheduled method
++    @Autowired
++    private FeedSchedulers feedSchedulers;
++
++    @Test
++    void syncDailyHistory() {
++        System.out.println("--- Starting manual data sync from JUnit Test ---");
++
++        // Call the exact method you want to run
++        feedSchedulers.syncDailyHistory();
++
++        System.out.println("--- Manual sync complete ---");
++    }
++
++    @Test
++    void cleanupIntraday(){
++        System.out.println("--- checking cleaing of 7days data--");
++
++        feedSchedulers.cleanupIntraday();
++
++        System.out.println("--checking complete----");
++    }
++}
+Index: src/main/java/com/hugoserve/metalbroker/domain/entity/MetalEntity.java
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/src/main/java/com/hugoserve/metalbroker/domain/entity/MetalEntity.java b/src/main/java/com/hugoserve/metalbroker/domain/entity/MetalEntity.java
+new file mode 100644
+--- /dev/null	(date 1768796792597)
++++ b/src/main/java/com/hugoserve/metalbroker/domain/entity/MetalEntity.java	(date 1768796792597)
+@@ -0,0 +1,27 @@
++package com.hugoserve.metalbroker.domain.entity;
++
++import jakarta.persistence.*;
++
++@Entity
++@Table(name = "metals")
++public class MetalEntity {
++    @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
++    private Long id;
++
++    @Column(nullable=false, length=8, unique=true)
++    private String code;
++
++    @Column(nullable=false, length=64)
++    private String name;
++
++    @Column(name="is_active", nullable=false)
++    private boolean active = true;
++
++    public Long getId() { return id; }
++    public String getCode() { return code; }
++    public void setCode(String code) { this.code = code; }
++    public String getName() { return name; }
++    public void setName(String name) { this.name = name; }
++    public boolean isActive() { return active; }
++    public void setActive(boolean active) { this.active = active; }
++}
+Index: src/main/java/com/hugoserve/metalbroker/domain/repo/MetalDailyHistoryRepository.java
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/src/main/java/com/hugoserve/metalbroker/domain/repo/MetalDailyHistoryRepository.java b/src/main/java/com/hugoserve/metalbroker/domain/repo/MetalDailyHistoryRepository.java
+new file mode 100644
+--- /dev/null	(date 1769157869171)
++++ b/src/main/java/com/hugoserve/metalbroker/domain/repo/MetalDailyHistoryRepository.java	(date 1769157869171)
+@@ -0,0 +1,48 @@
++package com.hugoserve.metalbroker.domain.repo;
++
++import com.hugoserve.metalbroker.domain.entity.MetalDailyHistoryEntity;
++import org.springframework.data.jpa.repository.JpaRepository;
++import org.springframework.data.jpa.repository.Query;
++import org.springframework.data.domain.Page;
++import org.springframework.data.domain.Pageable;
++
++import java.time.LocalDate;
++import java.util.List;
++import java.util.Optional;
++
++public interface MetalDailyHistoryRepository extends JpaRepository<MetalDailyHistoryEntity, Long> {
++
++    Optional<MetalDailyHistoryEntity> findByMetal_IdAndDayUtc(Long metalId, LocalDate dayUtc);
++
++    @Query("select max(h.dayUtc) from MetalDailyHistoryEntity h where h.metal.id = :metalId")
++    LocalDate findMaxDayUtcByMetalId(Long metalId);
++
++    List<MetalDailyHistoryEntity> findByMetal_IdAndDayUtcBetweenOrderByDayUtcAsc(Long metalId, LocalDate from, LocalDate to);
++
++    @Query("""
++    select h
++    from MetalDailyHistoryEntity h
++    join fetch h.metal m
++    where m.id = :metalId
++      and h.dayUtc between :from and :to
++    order by h.dayUtc asc
++    """)
++    List<MetalDailyHistoryEntity> findByMetalIdAndDayUtcBetweenFetchMetal(Long metalId, LocalDate from, LocalDate to);
++
++    Page<MetalDailyHistoryEntity> findByMetal_IdAndDayUtcBetweenOrderByDayUtcAsc(
++            Long metalId, LocalDate from, LocalDate to, Pageable pageable
++    );
++
++    @Query("""
++    select h
++    from MetalDailyHistoryEntity h
++    join fetch h.metal m
++    where m.id = :metalId
++      and h.dayUtc between :from and :to
++    order by h.dayUtc asc
++    """)
++    Page<MetalDailyHistoryEntity> findByMetalIdAndDayUtcBetweenFetchMetalPage(
++            Long metalId, LocalDate from, LocalDate to, Pageable pageable
++    );
++
++}
+Index: src/main/java/com/hugoserve/metalbroker/domain/repo/MetalLatestRepository.java
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/src/main/java/com/hugoserve/metalbroker/domain/repo/MetalLatestRepository.java b/src/main/java/com/hugoserve/metalbroker/domain/repo/MetalLatestRepository.java
+new file mode 100644
+--- /dev/null	(date 1769057672914)
++++ b/src/main/java/com/hugoserve/metalbroker/domain/repo/MetalLatestRepository.java	(date 1769057672914)
+@@ -0,0 +1,28 @@
++package com.hugoserve.metalbroker.domain.repo;
++
++import com.hugoserve.metalbroker.domain.entity.MetalLatestEntity;
++import org.springframework.data.jpa.repository.JpaRepository;
++import org.springframework.data.jpa.repository.Query;
++
++import java.util.List;
++import java.util.Optional;
++
++public interface MetalLatestRepository extends JpaRepository<MetalLatestEntity, Long> {
++
++    // fetch latest snapshot for ONE metal
++    @Query("""
++        select ml
++        from MetalLatestEntity ml
++        join fetch ml.metal m
++        where m.id = :metalId
++    """)
++    Optional<MetalLatestEntity> findLatestWithMetal(Long metalId);
++
++    // fetch latest snapshot for ALL metals
++    @Query("""
++        select ml
++        from MetalLatestEntity ml
++        join fetch ml.metal
++    """)
++    List<MetalLatestEntity> findAllWithMetal();
++}
+Index: src/main/java/com/hugoserve/metalbroker/domain/repo/SpotTick5mRepository.java
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/src/main/java/com/hugoserve/metalbroker/domain/repo/SpotTick5mRepository.java b/src/main/java/com/hugoserve/metalbroker/domain/repo/SpotTick5mRepository.java
+new file mode 100644
+--- /dev/null	(date 1769158115522)
++++ b/src/main/java/com/hugoserve/metalbroker/domain/repo/SpotTick5mRepository.java	(date 1769158115522)
+@@ -0,0 +1,66 @@
++package com.hugoserve.metalbroker.domain.repo;
++
++import com.hugoserve.metalbroker.domain.entity.SpotTick5mEntity;
++
++
++import org.springframework.data.jpa.repository.JpaRepository;
++import org.springframework.data.jpa.repository.Modifying;
++import org.springframework.data.jpa.repository.Query;
++import org.springframework.data.repository.query.Param;
++
++import org.springframework.data.domain.Page;
++import org.springframework.data.domain.Pageable;
++
++import jakarta.transaction.Transactional;
++
++import java.time.Instant;
++import java.util.List;
++import java.util.Optional;
++
++public interface SpotTick5mRepository extends JpaRepository<SpotTick5mEntity, Long> {
++
++    List<SpotTick5mEntity> findByMetal_IdAndTsUtcBetweenOrderByTsUtcAsc(Long metalId, Instant from, Instant to);
++
++    @Query("""
++        select t
++        from SpotTick5mEntity t
++        join fetch t.metal m
++        where m.id = :metalId
++          and t.tsUtc between :from and :to
++        order by t.tsUtc asc
++    """)
++    List<SpotTick5mEntity> findByMetalIdAndTsUtcBetweenFetchMetal(@Param("metalId") Long metalId,
++                                                                  @Param("from") Instant from,
++                                                                  @Param("to") Instant to);
++
++    long deleteByTsUtcBefore(Instant cutoff);
++
++    @Modifying
++    @Transactional
++    @Query("delete from SpotTick5mEntity t where t.metal.id = :metalId and t.tsUtc >= :from and t.tsUtc <= :to")
++    int deleteByMetalAndTsRange(@Param("metalId") Long metalId,
++                                @Param("from") Instant from,
++                                @Param("to") Instant to);
++
++    Optional<SpotTick5mEntity> findFirstByMetal_IdOrderByTsUtcDesc(Long metalId);
++
++    Page<SpotTick5mEntity> findByMetal_IdAndTsUtcBetweenOrderByTsUtcAsc(
++            Long metalId, Instant from, Instant to, Pageable pageable
++    );
++
++    @Query("""
++    select t
++    from SpotTick5mEntity t
++    join fetch t.metal m
++    where m.id = :metalId
++      and t.tsUtc between :from and :to
++    order by t.tsUtc asc
++""")
++    Page<SpotTick5mEntity> findByMetalIdAndTsUtcBetweenFetchMetalPage(
++            @Param("metalId") Long metalId,
++            @Param("from") Instant from,
++            @Param("to") Instant to,
++            Pageable pageable
++    );
++
++}
+Index: src/main/java/com/hugoserve/metalbroker/domain/repo/MetalRepository.java
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/src/main/java/com/hugoserve/metalbroker/domain/repo/MetalRepository.java b/src/main/java/com/hugoserve/metalbroker/domain/repo/MetalRepository.java
+new file mode 100644
+--- /dev/null	(date 1768978561522)
++++ b/src/main/java/com/hugoserve/metalbroker/domain/repo/MetalRepository.java	(date 1768978561522)
+@@ -0,0 +1,11 @@
++package com.hugoserve.metalbroker.domain.repo;
++
++import com.hugoserve.metalbroker.domain.entity.MetalEntity;
++import org.springframework.data.jpa.repository.JpaRepository;
++
++import java.util.Optional;
++
++public interface MetalRepository extends JpaRepository<MetalEntity, Long> {
++    Optional<MetalEntity> findByName(String name);
++    Optional<MetalEntity> findByCode(String code);
++}
+Index: src/main/java/com/hugoserve/metalbroker/domain/entity/SpotTick5mEntity.java
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/src/main/java/com/hugoserve/metalbroker/domain/entity/SpotTick5mEntity.java b/src/main/java/com/hugoserve/metalbroker/domain/entity/SpotTick5mEntity.java
+new file mode 100644
+--- /dev/null	(date 1768796872361)
++++ b/src/main/java/com/hugoserve/metalbroker/domain/entity/SpotTick5mEntity.java	(date 1768796872361)
+@@ -0,0 +1,52 @@
++package com.hugoserve.metalbroker.domain.entity;
++
++import jakarta.persistence.*;
++
++import java.math.BigDecimal;
++import java.time.Instant;
++
++@Entity
++@Table(
++        name="spot_ticks_5m",
++        uniqueConstraints = @UniqueConstraint(name="uq_tick", columnNames={"metal_id","ts_utc"}),
++        indexes = @Index(name="idx_tick_metal_ts", columnList="metal_id,ts_utc")
++)
++public class SpotTick5mEntity {
++
++    @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
++    private Long id;
++
++    @ManyToOne(fetch=FetchType.LAZY, optional=false)
++    @JoinColumn(name="metal_id", nullable=false)
++    private MetalEntity metal;
++
++    @Column(name="ts_utc", nullable=false)
++    private Instant tsUtc;
++
++    @Column(precision=20, scale=6) private BigDecimal ask;
++    @Column(precision=20, scale=6) private BigDecimal mid;
++    @Column(precision=20, scale=6) private BigDecimal bid;
++    @Column(precision=20, scale=6) private BigDecimal value;
++    @Column(precision=20, scale=6) private BigDecimal performance;
++
++    @Column(nullable=false, length=64)
++    private String source = "goldbroker";
++
++    public Long getId() { return id; }
++    public MetalEntity getMetal() { return metal; }
++    public void setMetal(MetalEntity metal) { this.metal = metal; }
++    public Instant getTsUtc() { return tsUtc; }
++    public void setTsUtc(Instant tsUtc) { this.tsUtc = tsUtc; }
++    public BigDecimal getAsk() { return ask; }
++    public void setAsk(BigDecimal ask) { this.ask = ask; }
++    public BigDecimal getMid() { return mid; }
++    public void setMid(BigDecimal mid) { this.mid = mid; }
++    public BigDecimal getBid() { return bid; }
++    public void setBid(BigDecimal bid) { this.bid = bid; }
++    public BigDecimal getValue() { return value; }
++    public void setValue(BigDecimal value) { this.value = value; }
++    public BigDecimal getPerformance() { return performance; }
++    public void setPerformance(BigDecimal performance) { this.performance = performance; }
++    public String getSource() { return source; }
++    public void setSource(String source) { this.source = source; }
++}
+Index: src/main/java/com/hugoserve/metalbroker/domain/entity/MetalDailyHistoryEntity.java
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/src/main/java/com/hugoserve/metalbroker/domain/entity/MetalDailyHistoryEntity.java b/src/main/java/com/hugoserve/metalbroker/domain/entity/MetalDailyHistoryEntity.java
+new file mode 100644
+--- /dev/null	(date 1768900865375)
++++ b/src/main/java/com/hugoserve/metalbroker/domain/entity/MetalDailyHistoryEntity.java	(date 1768900865375)
+@@ -0,0 +1,55 @@
++package com.hugoserve.metalbroker.domain.entity;
++
++import jakarta.persistence.*;
++import java.math.BigDecimal;
++import java.time.LocalDate;
++
++@Entity
++@Table(
++        name="metal_daily_history",
++        uniqueConstraints = @UniqueConstraint(name="uq_history", columnNames={"metal_id","day_utc"}),
++        indexes = @Index(name="idx_history_metal_day", columnList="metal_id,day_utc")
++)
++public class MetalDailyHistoryEntity {
++
++    @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
++    private Long id;
++
++    @ManyToOne(fetch=FetchType.LAZY, optional=false)
++    @JoinColumn(name="metal_id", nullable=false)
++    private MetalEntity metal;
++
++    @Column(name="day_utc", nullable=false)
++    private LocalDate dayUtc;
++
++    @Column(precision=20, scale=6, nullable=false) private BigDecimal open;
++    @Column(precision=20, scale=6, nullable=false) private BigDecimal high;
++    @Column(precision=20, scale=6, nullable=false) private BigDecimal low;
++    @Column(precision=20, scale=6, nullable=false) private BigDecimal close;
++
++    @Column(precision=20, scale=6) private BigDecimal ma50;
++    @Column(precision=20, scale=6) private BigDecimal ma200;
++
++    @Column(nullable=false, length=64)
++    private String source = "goldbroker";
++
++    public Long getId() { return id; }
++    public MetalEntity getMetal() { return metal; }
++    public void setMetal(MetalEntity metal) { this.metal = metal; }
++    public LocalDate getDayUtc() { return dayUtc; }
++    public void setDayUtc(LocalDate dayUtc) { this.dayUtc = dayUtc; }
++    public BigDecimal getOpen() { return open; }
++    public void setOpen(BigDecimal open) { this.open = open; }
++    public BigDecimal getHigh() { return high; }
++    public void setHigh(BigDecimal high) { this.high = high; }
++    public BigDecimal getLow() { return low; }
++    public void setLow(BigDecimal low) { this.low = low; }
++    public BigDecimal getClose() { return close; }
++    public void setClose(BigDecimal close) { this.close = close; }
++    public BigDecimal getMa50() { return ma50; }
++    public void setMa50(BigDecimal ma50) { this.ma50 = ma50; }
++    public BigDecimal getMa200() { return ma200; }
++    public void setMa200(BigDecimal ma200) { this.ma200 = ma200; }
++    public String getSource() { return source; }
++    public void setSource(String source) { this.source = source; }
++}
+Index: src/main/java/com/hugoserve/metalbroker/feed/GoldBrokerApiClientImpl.java
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/src/main/java/com/hugoserve/metalbroker/feed/GoldBrokerApiClientImpl.java b/src/main/java/com/hugoserve/metalbroker/feed/GoldBrokerApiClientImpl.java
+new file mode 100644
+--- /dev/null	(date 1768975731764)
++++ b/src/main/java/com/hugoserve/metalbroker/feed/GoldBrokerApiClientImpl.java	(date 1768975731764)
+@@ -0,0 +1,73 @@
++package com.hugoserve.metalbroker.feed;
++
++import com.google.protobuf.util.JsonFormat;
++import com.hugoserve.metalbroker.proto.MetalRatesProto;
++import com.hugoserve.metalbroker.proto.MetalRatesProto.Metal;
++import com.hugoserve.metalbroker.utils.MetalParamMapper;
++import org.springframework.beans.factory.annotation.Value;
++import org.springframework.stereotype.Component;
++import org.springframework.web.client.RestTemplate;
++import org.springframework.web.util.UriComponentsBuilder;
++
++@Component
++public class GoldBrokerApiClientImpl implements GoldBrokerApiClient {
++
++    private final RestTemplate restTemplate;
++    private final String baseUrl;
++
++    public GoldBrokerApiClientImpl(RestTemplate restTemplate,
++                                   @Value("${metalbroker.feed.base-url}") String baseUrl) {
++        this.restTemplate = restTemplate;
++        this.baseUrl = baseUrl;
++    }
++
++    private String resolveApiSymbol(String metalNameOrCode) {
++        // If user passes "gold" map -> XAU, else if passes "XAU" keep it.
++        // Your MetalParamMapper currently maps names; keep your behavior:
++        Metal metalEnum = MetalParamMapper.fromApi(metalNameOrCode);
++
++        if (metalEnum == Metal.UNRECOGNIZED || metalEnum == Metal.METAL_UNSPECIFIED) {
++            throw new IllegalArgumentException("Unsupported metal: " + metalNameOrCode);
++        }
++        return MetalParamMapper.toApi(metalEnum); // "XAU"
++    }
++
++    private String buildUrl(String path, String metalCode, String currency, String unit) {
++        String apiSymbol = resolveApiSymbol(metalCode);
++        return UriComponentsBuilder.fromUriString(baseUrl + path)
++                .queryParam("metal", apiSymbol)
++                .queryParam("currency", currency)
++                .queryParam("weight_unit", unit)
++                .toUriString();
++    }
++
++    private <T extends com.google.protobuf.Message.Builder> Object parseJson(String json, T builder) {
++        try {
++            JsonFormat.parser().ignoringUnknownFields().merge(json, builder);
++            return builder.build();
++        } catch (Exception e) {
++            throw new RuntimeException("Failed to parse API response into proto", e);
++        }
++    }
++
++    @Override
++    public MetalRatesProto.SpotPrice fetchCurrent(String metalCode, String currency, String unit) {
++        String url = buildUrl("/spot-price", metalCode, currency, unit);
++        String json = restTemplate.getForObject(url, String.class);
++        return (MetalRatesProto.SpotPrice) parseJson(json, MetalRatesProto.SpotPrice.newBuilder());
++    }
++
++    @Override
++    public MetalRatesProto.SpotPricesResponse fetchIntraday(String metalCode, String currency, String unit) {
++        String url = buildUrl("/spot-prices", metalCode, currency, unit);
++        String json = restTemplate.getForObject(url, String.class);
++        return (MetalRatesProto.SpotPricesResponse) parseJson(json, MetalRatesProto.SpotPricesResponse.newBuilder());
++    }
++
++    @Override
++    public MetalRatesProto.HistoricalSpotPricesResponse fetchDailyHistory(String metalCode, String currency, String unit) {
++        String url = buildUrl("/historical-spot-prices", metalCode, currency, unit);
++        String json = restTemplate.getForObject(url, String.class);
++        return (MetalRatesProto.HistoricalSpotPricesResponse) parseJson(json, MetalRatesProto.HistoricalSpotPricesResponse.newBuilder());
++    }
++}
+Index: src/main/java/com/hugoserve/metalbroker/service/RateStorageService.java
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/src/main/java/com/hugoserve/metalbroker/service/RateStorageService.java b/src/main/java/com/hugoserve/metalbroker/service/RateStorageService.java
+new file mode 100644
+--- /dev/null	(date 1768975760046)
++++ b/src/main/java/com/hugoserve/metalbroker/service/RateStorageService.java	(date 1768975760046)
+@@ -0,0 +1,20 @@
++package com.hugoserve.metalbroker.service;
++
++import com.hugoserve.metalbroker.proto.MetalRatesProto;
++
++import java.util.List;
++
++public interface RateStorageService {
++
++    void upsertLatest(String metalCode, MetalRatesProto.SpotPrice dto);
++
++    void insertTickIfNewer(String metalCode, MetalRatesProto.SpotPrice dto);
++
++    void upsertIntradayTicks(String metalCode, List<MetalRatesProto.SpotPrice> items);
++
++    void upsertLastHistoricalCandleIfPresent(String metalCode, MetalRatesProto.SpotPricesResponse response);
++
++    void upsertDailyCandles(String metalCode, List<MetalRatesProto.SpotPriceItem> items, int lastNDaysOnly);
++
++    long cleanupIntradayOlderThanDays(int days);
++}
+Index: src/main/java/com/hugoserve/metalbroker/feed/GoldBrokerApiClient.java
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/src/main/java/com/hugoserve/metalbroker/feed/GoldBrokerApiClient.java b/src/main/java/com/hugoserve/metalbroker/feed/GoldBrokerApiClient.java
+new file mode 100644
+--- /dev/null	(date 1768975590457)
++++ b/src/main/java/com/hugoserve/metalbroker/feed/GoldBrokerApiClient.java	(date 1768975590457)
+@@ -0,0 +1,9 @@
++package com.hugoserve.metalbroker.feed;
++
++import com.hugoserve.metalbroker.proto.MetalRatesProto;
++
++public interface GoldBrokerApiClient {
++    MetalRatesProto.SpotPrice fetchCurrent(String metalCode, String currency, String unit);
++    MetalRatesProto.SpotPricesResponse fetchIntraday(String metalCode, String currency, String unit);
++    MetalRatesProto.HistoricalSpotPricesResponse fetchDailyHistory(String metalCode, String currency, String unit);
++}
+Index: src/test/java/com/hugoserve/metalbroker/RepositoryIntegrationTest.java
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/src/test/java/com/hugoserve/metalbroker/RepositoryIntegrationTest.java b/src/test/java/com/hugoserve/metalbroker/RepositoryIntegrationTest.java
+new file mode 100644
+--- /dev/null	(date 1768798567540)
++++ b/src/test/java/com/hugoserve/metalbroker/RepositoryIntegrationTest.java	(date 1768798567540)
+@@ -0,0 +1,88 @@
++package com.hugoserve.metalbroker;
++
++import com.hugoserve.metalbroker.domain.entity.MetalEntity;
++import com.hugoserve.metalbroker.domain.entity.SpotTick5mEntity;
++import com.hugoserve.metalbroker.domain.repo.MetalRepository;
++import com.hugoserve.metalbroker.domain.repo.SpotTick5mRepository;
++import org.junit.jupiter.api.Test;
++import org.springframework.beans.factory.annotation.Autowired;
++import org.springframework.boot.test.context.SpringBootTest;
++import org.springframework.test.context.DynamicPropertyRegistry;
++import org.springframework.test.context.DynamicPropertySource;
++import org.testcontainers.containers.MySQLContainer;
++import org.testcontainers.junit.jupiter.Container;
++import org.testcontainers.junit.jupiter.Testcontainers;
++
++import java.math.BigDecimal;
++import java.time.Instant;
++
++import static org.assertj.core.api.Assertions.*;
++
++@SpringBootTest
++@Testcontainers
++class RepositoryIntegrationTest {
++
++    @Container
++    static MySQLContainer<?> mysql = new MySQLContainer<>("mysql:8.4")
++            .withDatabaseName("metalbroker")
++            .withUsername("test")
++            .withPassword("test");
++
++    @DynamicPropertySource
++    static void props(DynamicPropertyRegistry r) {
++        r.add("spring.datasource.url", mysql::getJdbcUrl);
++        r.add("spring.datasource.username", mysql::getUsername);
++        r.add("spring.datasource.password", mysql::getPassword);
++        r.add("spring.jpa.hibernate.ddl-auto", () -> "validate");
++        r.add("spring.flyway.enabled", () -> "true");
++    }
++
++    @Autowired MetalRepository metalRepo;
++    @Autowired SpotTick5mRepository tickRepo;
++
++    @Test
++    void uniqueTickPerMetalTimestamp_isEnforced() {
++        MetalEntity m = new MetalEntity();
++        m.setCode("XAG");
++        m.setName("Silver");
++        metalRepo.save(m);
++
++        Instant t = Instant.parse("2026-01-16T00:00:00Z");
++
++        SpotTick5mEntity a = new SpotTick5mEntity();
++        a.setMetal(m);
++        a.setTsUtc(t);
++        a.setAsk(new BigDecimal("100.00"));
++        tickRepo.saveAndFlush(a);
++
++        SpotTick5mEntity b = new SpotTick5mEntity();
++        b.setMetal(m);
++        b.setTsUtc(t);
++        b.setAsk(new BigDecimal("101.00"));
++
++        assertThatThrownBy(() -> tickRepo.saveAndFlush(b))
++                .isInstanceOf(Exception.class);
++    }
++
++    @Test
++    void cleanupDeletesOlderThanCutoff() {
++        MetalEntity m = new MetalEntity();
++        m.setCode("XAU");
++        m.setName("Gold");
++        metalRepo.save(m);
++
++        Instant old = Instant.now().minusSeconds(60L * 60 * 24 * 10); // 10 days ago
++        Instant fresh = Instant.now();
++
++        SpotTick5mEntity a = new SpotTick5mEntity();
++        a.setMetal(m); a.setTsUtc(old); a.setAsk(new BigDecimal("1.0"));
++        tickRepo.save(a);
++
++        SpotTick5mEntity b = new SpotTick5mEntity();
++        b.setMetal(m); b.setTsUtc(fresh); b.setAsk(new BigDecimal("2.0"));
++        tickRepo.save(b);
++
++        long deleted = tickRepo.deleteByTsUtcBefore(Instant.now().minusSeconds(60L * 60 * 24 * 7));
++        assertThat(deleted).isGreaterThanOrEqualTo(1);
++    }
++}
+Index: src/main/java/com/hugoserve/metalbroker/schedulers/FeedSchedulers.java
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/src/main/java/com/hugoserve/metalbroker/schedulers/FeedSchedulers.java b/src/main/java/com/hugoserve/metalbroker/schedulers/FeedSchedulers.java
+new file mode 100644
+--- /dev/null	(date 1769459805346)
++++ b/src/main/java/com/hugoserve/metalbroker/schedulers/FeedSchedulers.java	(date 1769459805346)
+@@ -0,0 +1,143 @@
++package com.hugoserve.metalbroker.schedulers;
++
++import com.hugoserve.metalbroker.feed.GoldBrokerApiClient;
++import com.hugoserve.metalbroker.proto.MetalRatesProto;
++import com.hugoserve.metalbroker.service.RateStorageService;
++
++import org.springframework.beans.factory.annotation.Value;
++import org.springframework.boot.context.event.ApplicationReadyEvent;
++import org.springframework.context.event.EventListener;
++import org.springframework.scheduling.annotation.Scheduled;
++import org.springframework.stereotype.Component;
++
++import org.springframework.cache.annotation.CacheEvict;
++import static com.hugoserve.metalbroker.config.CacheConfig.CACHE_DB_LATEST;
++
++import java.util.Arrays;
++import java.util.List;
++
++@Component
++public class FeedSchedulers {
++
++    private final GoldBrokerApiClient api;
++    private final RateStorageService storage;
++
++    private final List<String> metals; // MUST be XAU,XAG...
++    private final String currency;
++    private final String unit;
++    private final int retentionDays;
++
++    public FeedSchedulers(GoldBrokerApiClient api,
++                          RateStorageService storage,
++                          @Value("${metalbroker.feed.metals}") String metalsCsv,
++                          @Value("${metalbroker.feed.currency}") String currency,
++                          @Value("${metalbroker.feed.weight-unit}") String unit,
++                          @Value("${metalbroker.feed.intraday-retention-days}") int retentionDays) {
++        this.api = api;
++        this.storage = storage;
++        this.metals = Arrays.stream(metalsCsv.split(","))
++                .map(String::trim)
++                .toList();
++        this.currency = currency;
++        this.unit = unit;
++        this.retentionDays = retentionDays;
++    }
++
++    // ✅ Backfill once at app start: API #2 + API #1
++    @CacheEvict(cacheNames = CACHE_DB_LATEST, allEntries = true)
++    @EventListener(ApplicationReadyEvent.class)
++    public void startupSync() {
++        for (String m : metals) {
++            try {
++                // 1) Backfill intraday window (API #2)
++                MetalRatesProto.SpotPricesResponse intraday = api.fetchIntraday(m, currency, unit);
++                if (intraday != null && intraday.hasEmbedded()) {
++                    var items = intraday.getEmbedded().getItemsList();
++                    if (items != null && !items.isEmpty()) {
++                        storage.upsertIntradayTicks(m, items);
++                    }
++                    // optional: daily candle from API#2 response if you re-enable it later
++                    // storage.upsertLastHistoricalCandleIfPresent(m, intraday);
++                }
++
++                // 2) Fetch latest snapshot once (API #1)
++                MetalRatesProto.SpotPrice latest = api.fetchCurrent(m, currency, unit);
++                if (latest != null) {
++                    storage.upsertLatest(m, latest);
++                    storage.insertTickIfNewer(m, latest);
++                }
++
++            } catch (Exception e) {
++                System.err.println("Startup sync failed for " + m + ": " + e.getMessage());
++            }
++        }
++    }
++
++    // ✅ API #1 every 5 minutes aligned to wall clock: 00,05,10...
++    // second=40 just to avoid API edge / second-level race
++    @CacheEvict(cacheNames = CACHE_DB_LATEST, allEntries = true)
++    @Scheduled(cron = "40 */5 * * * *", zone = "UTC")
++    public void syncApi1Every5Minutes() {
++        for (String m : metals) {
++            try {
++                MetalRatesProto.SpotPrice dto = api.fetchCurrent(m, currency, unit);
++                if (dto == null) continue;
++
++                storage.upsertLatest(m, dto);
++                storage.insertTickIfNewer(m, dto);
++
++            } catch (Exception e) {
++                System.err.println("API1 5-min sync failed for " + m + ": " + e.getMessage());
++            }
++        }
++    }
++
++    // ✅ API #2 once daily at 21:57 UTC (your requirement)
++    @Scheduled(cron = "0 58 21 * * *", zone = "UTC")
++    public void dailyIntradaySync() {
++        for (String m : metals) {
++            try {
++                MetalRatesProto.SpotPricesResponse resp = api.fetchIntraday(m, currency, unit);
++                if (resp != null && resp.hasEmbedded()) {
++                    var items = resp.getEmbedded().getItemsList();
++                    if (items != null && !items.isEmpty()) {
++                        storage.upsertIntradayTicks(m, items);
++                    }
++                    // optional:
++                    // storage.upsertLastHistoricalCandleIfPresent(m, resp);
++                }
++            } catch (Exception e) {
++                System.err.println("Daily intraday sync failed for " + m + ": " + e.getMessage());
++            }
++        }
++    }
++
++    // ✅ History sync once per day 22:01 UTC (same time as intraday)
++    @Scheduled(cron = "0 3 22 * * *", zone = "UTC")
++    public void syncDailyHistory() {
++        for (String m : metals) {
++            try {
++                MetalRatesProto.HistoricalSpotPricesResponse resp = api.fetchDailyHistory(m, currency, unit);
++                if (resp != null && resp.hasEmbedded()) {
++                    var items = resp.getEmbedded().getItemsList();
++                    if (items != null && !items.isEmpty()) {
++                        storage.upsertDailyCandles(m, items, 0); // 0 => bootstrap full if empty else incremental
++                    }
++                }
++            } catch (Exception e) {
++                System.err.println("Daily history sync failed for " + m + ": " + e.getMessage());
++            }
++        }
++    }
++
++    // ✅ keep only last N days in spot_ticks_5m
++    @Scheduled(cron = "0 5 22 * * *", zone = "UTC")
++    public void cleanupIntraday() {
++        try {
++            long deleted = storage.cleanupIntradayOlderThanDays(retentionDays);
++            System.out.println("Cleanup done, deleted rows: " + deleted);
++        } catch (Exception e) {
++            System.err.println("Cleanup failed: " + e.getMessage());
++        }
++    }
++}
+Index: src/main/java/com/hugoserve/metalbroker/service/impl/RateStorageServiceImpl.java
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/src/main/java/com/hugoserve/metalbroker/service/impl/RateStorageServiceImpl.java b/src/main/java/com/hugoserve/metalbroker/service/impl/RateStorageServiceImpl.java
+new file mode 100644
+--- /dev/null	(date 1768976145793)
++++ b/src/main/java/com/hugoserve/metalbroker/service/impl/RateStorageServiceImpl.java	(date 1768976145793)
+@@ -0,0 +1,193 @@
++package com.hugoserve.metalbroker.service.impl;
++
++import com.hugoserve.metalbroker.domain.entity.*;
++import com.hugoserve.metalbroker.domain.repo.*;
++import com.hugoserve.metalbroker.proto.MetalRatesProto;
++import com.hugoserve.metalbroker.service.RateStorageService;
++import jakarta.transaction.Transactional;
++import org.springframework.stereotype.Service;
++
++import java.math.BigDecimal;
++import java.time.*;
++import java.util.Comparator;
++import java.util.List;
++
++@Service
++public class RateStorageServiceImpl implements RateStorageService {
++
++    private final MetalRepository metalRepo;
++    private final MetalLatestRepository latestRepo;
++    private final SpotTick5mRepository tickRepo;
++    private final MetalDailyHistoryRepository candleRepo;
++
++    public RateStorageServiceImpl(MetalRepository metalRepo,
++                                  MetalLatestRepository latestRepo,
++                                  SpotTick5mRepository tickRepo,
++                                  MetalDailyHistoryRepository candleRepo) {
++        this.metalRepo = metalRepo;
++        this.latestRepo = latestRepo;
++        this.tickRepo = tickRepo;
++        this.candleRepo = candleRepo;
++    }
++
++    private MetalEntity requireMetal(String codeOrName) {
++        // BEST: store metals.code = XAU/XAG/... and always use findByCode.
++        // If scheduler still passes "gold" etc, keep findByName.
++        return metalRepo.findByCode(codeOrName).or(() -> metalRepo.findByName(codeOrName))
++                .orElseThrow(() -> new IllegalArgumentException("Unknown metal: " + codeOrName));
++    }
++
++    private Instant toInstant(MetalRatesProto.SpotPrice p) {
++        return Instant.ofEpochSecond(p.getDate().getSeconds(), p.getDate().getNanos());
++    }
++
++    private BigDecimal bd(double v) { return BigDecimal.valueOf(v); }
++
++    private BigDecimal opt(boolean has, double v) { return has ? BigDecimal.valueOf(v) : null; }
++
++    @Override
++    @Transactional
++    public void upsertLatest(String metalCode, MetalRatesProto.SpotPrice dto) {
++        if (dto == null) return;
++
++        MetalEntity metal = requireMetal(metalCode);
++
++        MetalLatestEntity latest = latestRepo.findById(metal.getId()).orElseGet(MetalLatestEntity::new);
++        latest.setMetal(metal);
++
++        latest.setFeedTsUtc(toInstant(dto));
++        latest.setCapturedAtUtc(Instant.now());
++
++        latest.setAsk(bd(dto.getAsk()));
++        latest.setMid(bd(dto.getMid()));
++        latest.setBid(bd(dto.getBid()));
++        latest.setValue(bd(dto.getValue()));
++        latest.setPerformance(bd(dto.getPerformance()));
++
++        latestRepo.save(latest);
++    }
++
++    @Override
++    @Transactional
++    public void insertTickIfNewer(String metalCode, MetalRatesProto.SpotPrice dto) {
++        if (dto == null) return;
++
++        MetalEntity metal = requireMetal(metalCode);
++        Instant incomingTs = toInstant(dto);
++
++        Instant lastTs = tickRepo.findFirstByMetal_IdOrderByTsUtcDesc(metal.getId())
++                .map(SpotTick5mEntity::getTsUtc)
++                .orElse(Instant.EPOCH);
++
++        if (!incomingTs.isAfter(lastTs)) return;
++
++        SpotTick5mEntity e = new SpotTick5mEntity();
++        e.setMetal(metal);
++        e.setTsUtc(incomingTs);
++
++        e.setAsk(bd(dto.getAsk()));
++        e.setMid(bd(dto.getMid()));
++        e.setBid(bd(dto.getBid()));
++        e.setValue(bd(dto.getValue()));
++        e.setPerformance(bd(dto.getPerformance()));
++
++        try { tickRepo.save(e); } catch (Exception ignored) {}
++    }
++
++    @Override
++    @Transactional
++    public void upsertIntradayTicks(String metalCode, List<MetalRatesProto.SpotPrice> items) {
++        if (items == null || items.isEmpty()) return;
++
++        MetalEntity metal = requireMetal(metalCode);
++
++        Instant lastTs = tickRepo.findFirstByMetal_IdOrderByTsUtcDesc(metal.getId())
++                .map(SpotTick5mEntity::getTsUtc)
++                .orElse(Instant.EPOCH);
++
++        items.stream()
++                .sorted(Comparator.comparing(this::toInstant))
++                .filter(p -> toInstant(p).isAfter(lastTs))
++                .forEach(p -> {
++                    SpotTick5mEntity e = new SpotTick5mEntity();
++                    e.setMetal(metal);
++                    e.setTsUtc(toInstant(p));
++                    e.setAsk(bd(p.getAsk()));
++                    e.setMid(bd(p.getMid()));
++                    e.setBid(bd(p.getBid()));
++                    e.setValue(bd(p.getValue()));
++                    e.setPerformance(bd(p.getPerformance()));
++                    try { tickRepo.save(e); } catch (Exception ignored) {}
++                });
++    }
++
++    @Override
++    @Transactional
++    public void upsertLastHistoricalCandleIfPresent(String metalCode, MetalRatesProto.SpotPricesResponse response) {
++        if (response == null || !response.hasEmbedded() || !response.getEmbedded().hasLastHistoricalSpotPrice()) return;
++
++        MetalEntity metal = requireMetal(metalCode);
++        MetalRatesProto.SpotPriceItem d = response.getEmbedded().getLastHistoricalSpotPrice();
++
++        LocalDate day = LocalDate.parse(d.getDate());
++
++        MetalDailyHistoryEntity candle = candleRepo.findByMetal_IdAndDayUtc(metal.getId(), day)
++                .orElseGet(MetalDailyHistoryEntity::new);
++
++        candle.setMetal(metal);
++        candle.setDayUtc(day);
++
++        candle.setOpen(bd(d.getOpen()));
++        candle.setHigh(bd(d.getHigh()));
++        candle.setLow(bd(d.getLow()));
++        candle.setClose(bd(d.getClose()));
++        candle.setMa50(opt(d.hasMa50(), d.getMa50()));
++        candle.setMa200(opt(d.hasMa200(), d.getMa200()));
++
++        candleRepo.save(candle);
++    }
++
++    @Override
++    @Transactional
++    public void upsertDailyCandles(String metalCode, List<MetalRatesProto.SpotPriceItem> items, int lastNDaysOnly) {
++        if (items == null || items.isEmpty()) return;
++
++        MetalEntity metal = requireMetal(metalCode);
++
++        LocalDate maxDayInDb = candleRepo.findMaxDayUtcByMetalId(metal.getId());
++
++        // If DB empty -> bootstrap FULL history (ignore lastNDaysOnly)
++        List<MetalRatesProto.SpotPriceItem> list = items;
++        if (maxDayInDb != null && lastNDaysOnly > 0 && items.size() > lastNDaysOnly) {
++            list = items.subList(items.size() - lastNDaysOnly, items.size());
++        }
++
++        for (var i : list) {
++            LocalDate day = LocalDate.parse(i.getDate());
++
++            boolean shouldWrite = (maxDayInDb == null) || day.isAfter(maxDayInDb) || day.isEqual(maxDayInDb);
++            if (!shouldWrite) continue;
++
++            MetalDailyHistoryEntity candle = candleRepo.findByMetal_IdAndDayUtc(metal.getId(), day)
++                    .orElseGet(MetalDailyHistoryEntity::new);
++
++            candle.setMetal(metal);
++            candle.setDayUtc(day);
++            candle.setOpen(bd(i.getOpen()));
++            candle.setHigh(bd(i.getHigh()));
++            candle.setLow(bd(i.getLow()));
++            candle.setClose(bd(i.getClose()));
++            candle.setMa50(opt(i.hasMa50(), i.getMa50()));
++            candle.setMa200(opt(i.hasMa200(), i.getMa200()));
++
++            try { candleRepo.save(candle); } catch (Exception ignored) {}
++        }
++    }
++
++    @Override
++    @Transactional
++    public long cleanupIntradayOlderThanDays(int days) {
++        Instant cutoff = Instant.now().minus(Duration.ofDays(days));
++        return tickRepo.deleteByTsUtcBefore(cutoff);
++    }
++}
+Index: src/main/java/com/hugoserve/metalbroker/config/SchedulingConfig.java
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/src/main/java/com/hugoserve/metalbroker/config/SchedulingConfig.java b/src/main/java/com/hugoserve/metalbroker/config/SchedulingConfig.java
+new file mode 100644
+--- /dev/null	(date 1768797939469)
++++ b/src/main/java/com/hugoserve/metalbroker/config/SchedulingConfig.java	(date 1768797939469)
+@@ -0,0 +1,8 @@
++package com.hugoserve.metalbroker.config;
++
++import org.springframework.context.annotation.Configuration;
++import org.springframework.scheduling.annotation.EnableScheduling;
++
++@Configuration
++@EnableScheduling
++public class SchedulingConfig {}
+Index: src/main/java/com/hugoserve/metalbroker/config/CacheConfig.java
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/src/main/java/com/hugoserve/metalbroker/config/CacheConfig.java b/src/main/java/com/hugoserve/metalbroker/config/CacheConfig.java
+new file mode 100644
+--- /dev/null	(date 1769145674344)
++++ b/src/main/java/com/hugoserve/metalbroker/config/CacheConfig.java	(date 1769145674344)
+@@ -0,0 +1,41 @@
++package com.hugoserve.metalbroker.config;
++
++import com.github.benmanes.caffeine.cache.Caffeine;
++import org.springframework.cache.CacheManager;
++import org.springframework.cache.caffeine.CaffeineCacheManager;
++import org.springframework.context.annotation.Bean;
++import org.springframework.context.annotation.Configuration;
++
++import java.time.Duration;
++
++@Configuration
++public class CacheConfig {
++
++    public static final String CACHE_DB_METALS = "dbMetals";
++    public static final String CACHE_DB_LATEST = "dbLatest";
++
++    @Bean
++    public CacheManager cacheManager() {
++        CaffeineCacheManager mgr = new CaffeineCacheManager();
++
++        // Metals rarely change; admin writes will evict.
++        mgr.registerCustomCache(CACHE_DB_METALS,
++                Caffeine.newBuilder()
++                        .maximumSize(1000)
++                        .expireAfterWrite(Duration.ofHours(6))
++                        .build());
++
++        /**
++         * Latest is updated every 5 minutes by scheduler.
++         * We'll ALSO evict on every scheduler run, so TTL is only a safety net.
++         * Keep TTL short to reduce stale risk even if eviction is missed.
++         */
++        mgr.registerCustomCache(CACHE_DB_LATEST,
++                Caffeine.newBuilder()
++                        .maximumSize(1000)
++                        .expireAfterWrite(Duration.ofSeconds(30))
++                        .build());
++
++        return mgr;
++    }
++}
+Index: src/main/java/com/hugoserve/metalbroker/controller/AuthController.java
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/src/main/java/com/hugoserve/metalbroker/controller/AuthController.java b/src/main/java/com/hugoserve/metalbroker/controller/AuthController.java
+new file mode 100644
+--- /dev/null	(date 1769488779189)
++++ b/src/main/java/com/hugoserve/metalbroker/controller/AuthController.java	(date 1769488779189)
+@@ -0,0 +1,161 @@
++package com.hugoserve.metalbroker.controller;
++
++import com.hugoserve.metalbroker.facade.AuthFacade;
++import com.hugoserve.metalbroker.proto.MetalRatesProto.*;
++import com.hugoserve.metalbroker.utils.*;
++import lombok.RequiredArgsConstructor;
++import org.springframework.http.ResponseEntity;
++import org.springframework.web.bind.annotation.*;
++import static org.springframework.http.MediaType.APPLICATION_JSON_VALUE;
++
++
++
++@RestController
++@RequestMapping("/api/v1/auth")
++@RequiredArgsConstructor
++public class AuthController {
++
++    private final AuthFacade authFacade;
++
++    @PostMapping(value = "/register", produces = APPLICATION_JSON_VALUE)
++    public ResponseEntity<String> register(@RequestBody String body) {
++        return authFacade.register(body);
++    }
++
++    @PostMapping(value = "/login", produces = APPLICATION_JSON_VALUE)
++    public ResponseEntity<String> login(@RequestBody String body) {
++        return authFacade.login(body);
++    }
++
++    @PostMapping(value = "/refresh", produces = APPLICATION_JSON_VALUE)
++    public ResponseEntity<String> refresh(@RequestBody String body) {
++        return authFacade.refresh(body);
++    }
++}
++
++//@RestController
++//@RequestMapping("/api/v1/auth")
++//@RequiredArgsConstructor
++//public class AuthController {
++//
++//    private final AuthenticationManager authenticationManager;
++//    private final UserRepository userRepository;
++//    private final PasswordEncoder passwordEncoder;
++//    private final JwtService jwtService;
++//
++//    @PostMapping(value = "/register", produces = APPLICATION_JSON_VALUE)
++//    public ResponseEntity<String> register(@RequestBody String body) {
++//
++//        RegisterRequest request = ProtoJsonParser.parse(body, RegisterRequest.newBuilder()).build();
++//
++//        String email = request.getEmail() == null ? "" : request.getEmail().trim();
++//        String password = request.getPassword() == null ? "" : request.getPassword();
++//
++//        // Basic validations
++//        if (email.isEmpty()) return badRequest("Email must not be empty");
++//        if (!email.matches("^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,6}$")) return badRequest("Invalid email format");
++//        if (password.length() < 6) return badRequest("Password must be at least 6 chars");
++//
++//        // Check duplicate
++//        if (userRepository.findByEmail(email).isPresent()) return badRequest("Email exists");
++//
++//        // Create user
++//        var user = UserEntity.builder()
++//                .email(email)
++//                .password(passwordEncoder.encode(password))
++//                .role(UserRole.USER)
++//                .build();
++//
++//        // Generate tokens
++//        String access = jwtService.generateAccessToken(user);
++//        String refresh = jwtService.generateRefreshToken(user);
++//        user.setCurrentRefreshToken(refresh);
++//
++//        // Save user once
++//        userRepository.save(user);
++//
++//        return ResponseEntity.ok(ProtoJson.print(buildSuccessResponse(user, access, refresh)));
++//    }
++//
++//    @PostMapping(value = "/login", produces = APPLICATION_JSON_VALUE)
++//    public ResponseEntity<String> login(@RequestBody String body) {
++//
++//        LoginRequest request = ProtoJsonParser.parse(body, LoginRequest.newBuilder()).build();
++//
++//        try {
++//            authenticationManager.authenticate(
++//                    new UsernamePasswordAuthenticationToken(request.getEmail(), request.getPassword())
++//            );
++//        } catch (Exception ex) {
++//            return ResponseEntity.status(401).body(
++//                    ProtoJson.print(
++//                            AuthResponse.newBuilder()
++//                                    .setSuccess(false)
++//                                    .setMessage("Invalid email or password")
++//                                    .build()
++//                    )
++//            );
++//        }
++//
++//        var user = userRepository.findByEmail(request.getEmail()).orElseThrow();
++//
++//        String access = jwtService.generateAccessToken(user);
++//        String refresh = jwtService.generateRefreshToken(user);
++//        user.setCurrentRefreshToken(refresh);
++//        userRepository.save(user);
++//
++//        return ResponseEntity.ok(ProtoJson.print(buildSuccessResponse(user, access, refresh)));
++//    }
++//
++//    @PostMapping(value = "/refresh", produces = APPLICATION_JSON_VALUE)
++//    public ResponseEntity<String> refresh(@RequestBody String body) {
++//
++//        RefreshTokenRequest request = ProtoJsonParser.parse(body, RefreshTokenRequest.newBuilder()).build();
++//        String token = request.getRefreshToken();
++//
++//        String email = jwtService.extractUsername(token);
++//        if (email == null) return unauthorized("Invalid token");
++//
++//        var userOpt = userRepository.findByEmail(email);
++//        if (userOpt.isEmpty()) return unauthorized("User not found");
++//
++//        var user = userOpt.get();
++//
++//        if (!token.equals(user.getCurrentRefreshToken()) || !jwtService.isTokenValid(token, user)) {
++//            return unauthorized("Invalid or expired token");
++//        }
++//
++//        String access = jwtService.generateAccessToken(user);
++//        return ResponseEntity.ok(
++//                ProtoJson.print(buildSuccessResponse(user, access, user.getCurrentRefreshToken()))
++//        );
++//    }
++//
++//    // ---------------- Helper Methods ----------------
++//
++//    private AuthResponse buildSuccessResponse(UserEntity user, String access, String refresh) {
++//        long now = System.currentTimeMillis();
++//        return AuthResponse.newBuilder()
++//                .setSuccess(true)
++//                .setRole(user.getRole())
++//                .setTokens(TokenPair.newBuilder()
++//                        .setAccessToken(access)
++//                        .setRefreshToken(refresh)
++//                        .setAccessExpiresAt(Timestamps.fromMillis(now + JwtService.ACCESS_EXPIRY))
++//                        .setRefreshExpiresAt(Timestamps.fromMillis(now + JwtService.REFRESH_EXPIRY))
++//                        .build())
++//                .build();
++//    }
++//
++//    private ResponseEntity<String> badRequest(String msg) {
++//        return ResponseEntity.badRequest().body(
++//                ProtoJson.print(AuthResponse.newBuilder().setSuccess(false).setMessage(msg).build())
++//        );
++//    }
++//
++//    private ResponseEntity<String> unauthorized(String msg) {
++//        return ResponseEntity.status(401).body(
++//                ProtoJson.print(AuthResponse.newBuilder().setSuccess(false).setMessage(msg).build())
++//        );
++//    }
++//}
+Index: src/main/java/com/hugoserve/metalbroker/config/RestTemplateConfig.java
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/src/main/java/com/hugoserve/metalbroker/config/RestTemplateConfig.java b/src/main/java/com/hugoserve/metalbroker/config/RestTemplateConfig.java
+new file mode 100644
+--- /dev/null	(date 1768901696851)
++++ b/src/main/java/com/hugoserve/metalbroker/config/RestTemplateConfig.java	(date 1768901696851)
+@@ -0,0 +1,14 @@
++package com.hugoserve.metalbroker.config;
++
++import org.springframework.context.annotation.Bean;
++import org.springframework.context.annotation.Configuration;
++import org.springframework.web.client.RestTemplate;
++
++@Configuration
++public class RestTemplateConfig {
++
++    @Bean
++    public RestTemplate restTemplate() {
++        return new RestTemplate();
++    }
++}
+Index: src/main/java/com/hugoserve/metalbroker/security/JwtAuthenticationFilter.java
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/src/main/java/com/hugoserve/metalbroker/security/JwtAuthenticationFilter.java b/src/main/java/com/hugoserve/metalbroker/security/JwtAuthenticationFilter.java
+new file mode 100644
+--- /dev/null	(date 1769493855565)
++++ b/src/main/java/com/hugoserve/metalbroker/security/JwtAuthenticationFilter.java	(date 1769493855565)
+@@ -0,0 +1,84 @@
++package com.hugoserve.metalbroker.security;
++
++import jakarta.servlet.FilterChain;
++import jakarta.servlet.ServletException;
++import jakarta.servlet.http.HttpServletRequest;
++import jakarta.servlet.http.HttpServletResponse;
++import lombok.RequiredArgsConstructor;
++import org.springframework.lang.NonNull;
++import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
++import org.springframework.security.core.context.SecurityContextHolder;
++import org.springframework.security.core.userdetails.UserDetails;
++import org.springframework.security.core.userdetails.UserDetailsService;
++import org.springframework.security.web.authentication.WebAuthenticationDetailsSource;
++import org.springframework.stereotype.Component;
++import org.springframework.web.filter.OncePerRequestFilter;
++import java.io.IOException;
++
++
++@Component
++@RequiredArgsConstructor
++public class JwtAuthenticationFilter extends OncePerRequestFilter {
++
++    private final JwtService jwtService;
++    private final UserDetailsService userDetailsService;
++
++    @Override
++    protected void doFilterInternal(
++            @NonNull HttpServletRequest request,
++            @NonNull HttpServletResponse response,
++            @NonNull FilterChain filterChain
++    ) throws ServletException, IOException {
++
++        // Skip auth endpoints
++        if (request.getServletPath().startsWith("/api/v1/auth")) {
++            filterChain.doFilter(request, response);
++            return;
++        }
++
++        String authHeader = request.getHeader("Authorization");
++
++        // No token → continue (anonymous)
++        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
++            filterChain.doFilter(request, response);
++            return;
++        }
++
++        String jwt = authHeader.substring(7);
++
++        try {
++            String email = jwtService.extractUsername(jwt);
++
++            if (email != null &&
++                    SecurityContextHolder.getContext().getAuthentication() == null) {
++
++                UserDetails userDetails =
++                        userDetailsService.loadUserByUsername(email);
++
++                // ⚠️ IMPORTANT:
++                // If token expired → isTokenValid = false → no auth set
++                if (jwtService.isTokenValid(jwt, userDetails)) {
++                    UsernamePasswordAuthenticationToken authToken =
++                            new UsernamePasswordAuthenticationToken(
++                                    userDetails,
++                                    null,
++                                    userDetails.getAuthorities()
++                            );
++
++                    authToken.setDetails(
++                            new WebAuthenticationDetailsSource()
++                                    .buildDetails(request)
++                    );
++
++                    SecurityContextHolder.getContext()
++                            .setAuthentication(authToken);
++                }
++            }
++        } catch (Exception ignored) {
++            // 🚫 DO NOTHING
++            // Expired / invalid token → treated as unauthenticated
++        }
++
++        filterChain.doFilter(request, response);
++    }
++}
+Index: src/main/java/com/hugoserve/metalbroker/config/ApplicationConfig.java
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/src/main/java/com/hugoserve/metalbroker/config/ApplicationConfig.java b/src/main/java/com/hugoserve/metalbroker/config/ApplicationConfig.java
+new file mode 100644
+--- /dev/null	(date 1769445473314)
++++ b/src/main/java/com/hugoserve/metalbroker/config/ApplicationConfig.java	(date 1769445473314)
+@@ -0,0 +1,61 @@
++package com.hugoserve.metalbroker.config;
++
++import com.hugoserve.metalbroker.domain.repo.UserRepository;
++import lombok.RequiredArgsConstructor;
++import org.springframework.context.annotation.Bean;
++import org.springframework.context.annotation.Configuration;
++import org.springframework.security.authentication.AuthenticationManager;
++import org.springframework.security.authentication.AuthenticationProvider;
++import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
++import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
++import org.springframework.security.core.userdetails.UserDetailsService;
++import org.springframework.security.core.userdetails.UsernameNotFoundException;
++import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
++import org.springframework.security.crypto.password.PasswordEncoder;
++import org.springframework.http.converter.protobuf.ProtobufHttpMessageConverter;
++
++@Configuration
++@RequiredArgsConstructor
++public class ApplicationConfig {
++
++    private final UserRepository repository;
++
++    @Bean
++    public UserDetailsService userDetailsService() {
++        return username -> repository.findByEmail(username)
++                .orElseThrow(() -> new UsernameNotFoundException("User not found"));
++    }
++
++    @Bean
++    public AuthenticationProvider authenticationProvider() {
++        DaoAuthenticationProvider authProvider =
++                new DaoAuthenticationProvider(userDetailsService());
++        authProvider.setPasswordEncoder(passwordEncoder());
++        return authProvider;
++    }
++//    @Bean
++//    public AuthenticationProvider authenticationProvider(UserDetailsService userDetailsService,
++//                                                         PasswordEncoder passwordEncoder) {
++//        DaoAuthenticationProvider provider =
++//                new DaoAuthenticationProvider(userDetailsService);
++//        provider.setPasswordEncoder(passwordEncoder);
++//        return provider;
++//    }
++
++
++
++    @Bean
++    public AuthenticationManager authenticationManager(AuthenticationConfiguration config) throws Exception {
++        return config.getAuthenticationManager();
++    }
++
++    @Bean
++    public PasswordEncoder passwordEncoder() {
++        return new BCryptPasswordEncoder();
++    }
++
++//    @Bean
++//    public ProtobufHttpMessageConverter protobufHttpMessageConverter() {
++//        return new ProtobufHttpMessageConverter();
++//    }
++}
+\ No newline at end of file
+Index: src/main/java/com/hugoserve/metalbroker/config/SecurityConfig.java
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/src/main/java/com/hugoserve/metalbroker/config/SecurityConfig.java b/src/main/java/com/hugoserve/metalbroker/config/SecurityConfig.java
+new file mode 100644
+--- /dev/null	(date 1769497075389)
++++ b/src/main/java/com/hugoserve/metalbroker/config/SecurityConfig.java	(date 1769497075389)
+@@ -0,0 +1,41 @@
++package com.hugoserve.metalbroker.config;
++
++import com.hugoserve.metalbroker.security.ApiAuthorizationFilter;
++import com.hugoserve.metalbroker.security.JwtAuthenticationFilter;
++import lombok.RequiredArgsConstructor;
++import org.springframework.context.annotation.Bean;
++import org.springframework.context.annotation.Configuration;
++import org.springframework.security.authentication.AuthenticationProvider;
++import org.springframework.security.config.annotation.web.builders.HttpSecurity;
++import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
++import org.springframework.security.config.http.SessionCreationPolicy;
++import org.springframework.security.web.SecurityFilterChain;
++import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
++
++@Configuration
++@EnableWebSecurity
++@RequiredArgsConstructor
++public class SecurityConfig {
++
++    private final JwtAuthenticationFilter jwtAuthFilter;
++    private final ApiAuthorizationFilter apiAuthorizationFilter;
++    private final AuthenticationProvider authenticationProvider;
++
++    @Bean
++    public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
++        http
++                .csrf(csrf -> csrf.disable())
++                .authorizeHttpRequests(auth -> auth
++                        .requestMatchers("/api/v1/auth/**", "/actuator/**").permitAll() // Allow these
++                        // Admin-only endpoints
++//                        .requestMatchers("/api/v1/db/admin/**").hasRole("ADMIN")
++                        .anyRequest().permitAll() // Block everything else
++                )
++                .sessionManagement(sess -> sess.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
++                .authenticationProvider(authenticationProvider)
++                .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class)
++                .addFilterAfter(apiAuthorizationFilter, JwtAuthenticationFilter.class);
++
++        return http.build();
++    }
++}
+\ No newline at end of file
+Index: src/main/proto/MetalRatesProto.proto
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/src/main/proto/MetalRatesProto.proto b/src/main/proto/MetalRatesProto.proto
+new file mode 100644
+--- /dev/null	(date 1769491754552)
++++ b/src/main/proto/MetalRatesProto.proto	(date 1769491754552)
+@@ -0,0 +1,260 @@
++syntax = "proto3";
++
++package metalbroker.rates;
++
++import "google/protobuf/timestamp.proto"; // Required for Timestamp
++// If using specific Date types, you'd import "google/type/date.proto"
++
++option java_package = "com.hugoserve.metalbroker.proto";
++option java_outer_classname = "MetalRatesProto";
++
++enum WeightUnit {
++  WEIGHT_UNIT_UNSPECIFIED = 0;
++  g = 1;
++  kg = 2;
++  oz = 3;
++}
++
++enum Metal {
++  METAL_UNSPECIFIED = 0;
++  XAG = 1;
++  XAU = 2;
++  XPD = 3;
++  XPT = 4;
++}
++
++enum Currency {
++  CURRENCY_UNSPECIFIED = 0;
++  PKR = 1;
++  INR = 2;
++  USD = 3;
++  EUR = 4;
++  JPY = 5;
++  AUD = 6;
++}
++
++// --- NEW ENUMS FOR AUTH & TRADING ---
++
++enum UserRole {
++  ROLE_UNSPECIFIED = 0;
++  USER = 1;
++  ADMIN = 2;
++}
++
++enum TradeType {
++  TRADE_TYPE_UNSPECIFIED = 0;
++  BUY = 1;
++  SELL = 2;
++}
++
++// --- AUTHENTICATION MESSAGES ---
++
++message LoginRequest {
++  string email = 1;
++  string password = 2;
++}
++
++message RefreshTokenRequest {
++  string refresh_token = 1;
++}
++
++message RegisterRequest {
++  string email = 1;
++  string password = 2;
++  string first_name = 3;
++  string last_name = 4;
++}
++
++message TokenPair {
++  string access_token = 1;
++  string refresh_token = 2;
++  google.protobuf.Timestamp access_expires_at = 3;
++  google.protobuf.Timestamp refresh_expires_at = 4;
++}
++
++message AuthResponse {
++  bool success = 1;
++  string message = 2;
++  UserRole role = 3;
++  TokenPair tokens = 4; // Only populated on success
++}
++
++// --- WALLET & TRADING MESSAGES (Future Proofing) ---
++
++message WalletBalance {
++  Metal metal = 1;        // Using your existing Metal enum
++  double balance = 2;     // Quantity
++  double valuation = 3;   // Current Value in base currency
++}
++
++message WalletSummary {
++  string wallet_id = 1;
++  repeated WalletBalance balances = 2;
++  double total_equity = 3;
++}
++
++message TradeRequest {
++  TradeType type = 1;
++  Metal metal = 2;
++  double quantity = 3;
++  double locked_price = 4;
++}
++
++message TradeResponse {
++  bool success = 1;
++  string message = 2;
++  string trade_id = 3;
++  double executed_price = 4;
++  double total_cost = 5;
++  WalletSummary new_wallet_state = 6;
++}
++
++// --- EXISTING RATE MESSAGES (UNCHANGED) ---
++
++message SpotPrice {
++  // Supports "2026-01-15T22:15:00+00:00"
++  google.protobuf.Timestamp date = 1;
++  WeightUnit weight_unit = 2;
++  double ask = 3;
++  double mid = 4;
++  double bid = 5;
++  double value = 6;
++  double performance = 7;
++}
++
++message HistoricalSpotPricesResponse {
++  Metal metal = 1;
++  Currency currency = 2;
++  WeightUnit weight_unit = 3;
++  HistoricalEmbeddedItems embedded = 4 [json_name = "_embedded"];
++}
++
++message SpotPricesResponse {
++  Metal metal = 1;
++  Currency currency = 2;
++  WeightUnit weight_unit = 3;
++  EmbeddedItems embedded = 4 [json_name = "_embedded"];
++}
++
++message EmbeddedItems {
++  repeated SpotPrice items = 1;
++  int32 markets_closed = 2;
++  SpotPriceItem last_historical_spot_price = 3;
++}
++
++message HistoricalEmbeddedItems {
++  repeated SpotPriceItem items = 1;
++  Performances performances = 2;
++}
++
++message SpotPriceItem {
++  string date = 1;
++  WeightUnit weight_unit = 2;
++
++  double close = 3;
++  double high = 4;
++  double low = 5;
++  double open = 6;
++
++  optional double ma50 = 7;
++  optional double ma200 = 8;
++}
++
++message Performances {
++  double D5  = 1 [json_name = "5D"];
++  double M1  = 2 [json_name = "1M"];
++  double YTD = 3 [json_name = "YTD"];
++  double Y1  = 4 [json_name = "1Y"];
++  double Y5  = 5 [json_name = "5Y"];
++  double Y10 = 6 [json_name = "10Y"];
++  double MAX = 7 [json_name = "MAX"];
++}
++
++message AdminWriteResult {
++  bool ok = 1;
++  string message = 2;
++  int64 affected = 3;
++}
++message MetalInfo {
++  int64 id = 1;
++  Metal metal = 2;      // XAU/XAG/XPD/XPT (maps from DB metals.code)
++  string name = 3;      // "gold"
++  bool is_active = 4;
++}
++
++message MetalList {
++  repeated MetalInfo items = 1;
++}
++
++message LatestSnapshot {
++  Metal metal = 1;
++
++  // feed timestamp from API
++  google.protobuf.Timestamp feed_ts_utc = 2;
++
++  // db captured time (when scheduler fetched)
++  google.protobuf.Timestamp captured_at_utc = 3;
++
++  double ask = 4;
++  double mid = 5;
++  double bid = 6;
++  double value = 7;
++  double performance = 8;
++  string source = 9;
++}
++
++message Tick5m {
++  Metal metal = 1;
++  google.protobuf.Timestamp ts_utc = 2;
++  double ask = 3;
++  double mid = 4;
++  double bid = 5;
++  double value = 6;
++  double performance = 7;
++  string source = 8;
++}
++
++message Tick5mList {
++  Metal metal = 1;
++  repeated Tick5m items = 2;
++}
++
++message DailyHistoryCandle {
++  Metal metal = 1;
++  string day_utc = 2;   // "yyyy-MM-dd" (easy, stable)
++
++  double open = 3;
++  double high = 4;
++  double low = 5;
++  double close = 6;
++
++  optional double ma50 = 7;
++  optional double ma200 = 8;
++  string source = 9;
++}
++
++message DailyHistoryList {
++  Metal metal = 1;
++  repeated DailyHistoryCandle items = 2;
++}
++
++
++message PageInfo {
++  int32 page = 1;           // current page (0-based)
++  int32 size = 2;           // page size
++  int64 total_elements = 3; // total rows
++  int32 total_pages = 4;    // total pages
++}
++
++message Tick5mPage {
++  Metal metal = 1;
++  repeated Tick5m items = 2;
++  PageInfo page = 3;
++}
++
++message DailyHistoryPage {
++  Metal metal = 1;
++  repeated DailyHistoryCandle items = 2;
++  PageInfo page = 3;
++}
++
+Index: src/main/java/com/hugoserve/metalbroker/config/ProtobufConfig.java
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/src/main/java/com/hugoserve/metalbroker/config/ProtobufConfig.java b/src/main/java/com/hugoserve/metalbroker/config/ProtobufConfig.java
+new file mode 100644
+--- /dev/null	(date 1768299484213)
++++ b/src/main/java/com/hugoserve/metalbroker/config/ProtobufConfig.java	(date 1768299484213)
+@@ -0,0 +1,14 @@
++package com.hugoserve.metalbroker.config;
++
++import org.springframework.context.annotation.Bean;
++import org.springframework.context.annotation.Configuration;
++import org.springframework.http.converter.protobuf.ProtobufHttpMessageConverter;
++
++@Configuration
++public class ProtobufConfig {
++
++    @Bean
++    public ProtobufHttpMessageConverter protobufHttpMessageConverter() {
++        return new ProtobufHttpMessageConverter();
++    }
++}
+Index: src/main/resources/application.properties
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.BaseRevisionTextPatchEP
+<+>\n# Database connection using variables\nspring.application.name=${DB_NAME}\nspring.datasource.url=${DB_URL}\nspring.datasource.username=${DB_USERNAME}\nspring.datasource.password=${DB_PASSWORD}\n\n# Security credentials using variables\nspring.security.user.name=${APP_USER}\nspring.security.user.password=${APP_PASSWORD}\n\nspring.jpa.hibernate.ddl-auto=update\nspring.jpa.open-in-view=false\n
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>ISO-8859-1
+===================================================================
+diff --git a/src/main/resources/application.properties b/src/main/resources/application.properties
+--- a/src/main/resources/application.properties	(revision c2519317e88f55e3783ddde2ea26df99646cbbe8)
++++ b/src/main/resources/application.properties	(date 1769446856167)
+@@ -4,10 +4,53 @@
+ spring.datasource.url=${DB_URL}
+ spring.datasource.username=${DB_USERNAME}
+ spring.datasource.password=${DB_PASSWORD}
++# Set lifetime to 30 minutes (1800000 ms)
++spring.datasource.hikari.max-lifetime=1800000
+ 
++# Ensure the pool tests connections frequently
++spring.datasource.hikari.keepalive-time=300000
++
++# Minimum time a connection can sit idle (must be shorter than max-lifetime)
++spring.datasource.hikari.idle-timeout=600000
+ # Security credentials using variables
+ spring.security.user.name=${APP_USER}
+ spring.security.user.password=${APP_PASSWORD}
+ 
+-spring.jpa.hibernate.ddl-auto=update
+ spring.jpa.open-in-view=false
++
++metalbroker.feed.base-url=https://goldbroker.com/api
++# Schedulers Configuration (MANDATORY)
++metalbroker.feed.metals=gold,silver,platinum,palladium
++metalbroker.feed.currency=INR
++metalbroker.feed.weight-unit=g
++metalbroker.feed.intraday-retention-days=7
++
++# Interval timings in milliseconds
++metalbroker.feed.latest-interval-ms=10000
++metalbroker.feed.intraday-interval-ms=300000
++
++
++# Recommended MySQL driver hint (optional)
++spring.datasource.driver-class-name=com.mysql.cj.jdbc.Driver
++
++
++# Flyway (migrations)
++spring.flyway.enabled=true
++spring.flyway.locations=classpath:db/migration
++spring.flyway.baseline-on-migrate=true
++spring.flyway.baseline-version=1
++spring.jpa.hibernate.ddl-auto=validate
++
++#caching check
++
++logging.level.org.springframework.cache=TRACE
++logging.level.org.springframework.cache.interceptor=TRACE
++
++# (Optional) Helpful logging during Phase 1
++spring.jpa.show-sql=false
++logging.level.org.hibernate.SQL=warn
++logging.level.org.hibernate.type.descriptor.sql=warn
++
++
++# JWT Secret (Must be 32+ characters)
++jwt.secret=${JWT_SECRET}
+\ No newline at end of file
+Index: src/main/java/com/hugoserve/metalbroker/controller/DbRatesController.java
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/src/main/java/com/hugoserve/metalbroker/controller/DbRatesController.java b/src/main/java/com/hugoserve/metalbroker/controller/DbRatesController.java
+new file mode 100644
+--- /dev/null	(date 1769159274841)
++++ b/src/main/java/com/hugoserve/metalbroker/controller/DbRatesController.java	(date 1769159274841)
+@@ -0,0 +1,66 @@
++package com.hugoserve.metalbroker.controller;
++
++import com.hugoserve.metalbroker.facade.DbRatesReadFacade;
++import org.springframework.http.MediaType;
++import org.springframework.http.ResponseEntity;
++import org.springframework.web.bind.annotation.*;
++
++import java.time.Instant;
++import java.time.LocalDate;
++
++@RestController
++@RequestMapping("/api/v1/db/rates")
++public class DbRatesController {
++
++    private final DbRatesReadFacade facade;
++
++    public DbRatesController(DbRatesReadFacade facade) {
++        this.facade = facade;
++    }
++
++    @GetMapping(value="/latest", produces=MediaType.APPLICATION_JSON_VALUE)
++    public ResponseEntity<String> latest(@RequestParam String metal) {
++        return facade.latest(metal);
++    }
++
++    @GetMapping(value="/intraday", produces=MediaType.APPLICATION_JSON_VALUE)
++    public ResponseEntity<String> intraday(@RequestParam String metal,
++                                           @RequestParam Instant from,
++                                           @RequestParam Instant to) {
++        return facade.intraday(metal, from, to);
++    }
++
++    @GetMapping(value="/history", produces=MediaType.APPLICATION_JSON_VALUE)
++    public ResponseEntity<String> history(@RequestParam String metal,
++                                          @RequestParam LocalDate fromDay,
++                                          @RequestParam LocalDate toDay) {
++        return facade.history(metal, fromDay, toDay);
++    }
++
++    @GetMapping(value="/intraday/page", produces = MediaType.APPLICATION_JSON_VALUE)
++    public ResponseEntity<String> intradayPage(
++            @RequestParam String metal,
++            @RequestParam Instant from,
++            @RequestParam Instant to,
++            @RequestParam(defaultValue = "0") int page,
++            @RequestParam(defaultValue = "200") int size,
++            @RequestParam(required = false) String sort,
++            @RequestParam(defaultValue = "asc") String dir
++    ) {
++        return facade.intradayPage(metal, from, to, page, size, sort, dir);
++    }
++
++    @GetMapping(value="/history/page", produces = MediaType.APPLICATION_JSON_VALUE)
++    public ResponseEntity<String> historyPage(
++            @RequestParam String metal,
++            @RequestParam LocalDate fromDay,
++            @RequestParam LocalDate toDay,
++            @RequestParam(defaultValue = "0") int page,
++            @RequestParam(defaultValue = "200") int size,
++            @RequestParam(required = false) String sort,
++            @RequestParam(defaultValue = "asc") String dir
++    ) {
++        return facade.historyPage(metal, fromDay, toDay, page, size, sort, dir);
++    }
++
++}
+Index: src/main/java/com/hugoserve/metalbroker/utils/ProtoJsonParser.java
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/src/main/java/com/hugoserve/metalbroker/utils/ProtoJsonParser.java b/src/main/java/com/hugoserve/metalbroker/utils/ProtoJsonParser.java
+new file mode 100644
+--- /dev/null	(date 1768992846872)
++++ b/src/main/java/com/hugoserve/metalbroker/utils/ProtoJsonParser.java	(date 1768992846872)
+@@ -0,0 +1,17 @@
++package com.hugoserve.metalbroker.utils;
++
++import com.google.protobuf.Message;
++import com.google.protobuf.util.JsonFormat;
++
++public final class ProtoJsonParser {
++    private ProtoJsonParser() {}
++
++    public static <T extends Message.Builder> T parse(String json, T builder) {
++        try {
++            JsonFormat.parser().ignoringUnknownFields().merge(json, builder);
++            return builder;
++        } catch (Exception e) {
++            throw new RuntimeException("Failed to parse proto JSON", e);
++        }
++    }
++}
+Index: src/main/java/com/hugoserve/metalbroker/utils/ProtoJson.java
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/src/main/java/com/hugoserve/metalbroker/utils/ProtoJson.java b/src/main/java/com/hugoserve/metalbroker/utils/ProtoJson.java
+new file mode 100644
+--- /dev/null	(date 1768991784206)
++++ b/src/main/java/com/hugoserve/metalbroker/utils/ProtoJson.java	(date 1768991784206)
+@@ -0,0 +1,18 @@
++package com.hugoserve.metalbroker.utils;
++
++import com.google.protobuf.Message;
++import com.google.protobuf.util.JsonFormat;
++
++public class ProtoJson {
++    private static final JsonFormat.Printer PRINTER = JsonFormat.printer()
++            .includingDefaultValueFields()
++            .preservingProtoFieldNames();
++
++    public static String print(Message msg) {
++        try {
++            return PRINTER.print(msg);
++        } catch (Exception e) {
++            throw new RuntimeException("Failed to print proto as JSON", e);
++        }
++    }
++}
+Index: src/main/java/com/hugoserve/metalbroker/controller/DbMetalController.java
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/src/main/java/com/hugoserve/metalbroker/controller/DbMetalController.java b/src/main/java/com/hugoserve/metalbroker/controller/DbMetalController.java
+new file mode 100644
+--- /dev/null	(date 1769077155804)
++++ b/src/main/java/com/hugoserve/metalbroker/controller/DbMetalController.java	(date 1769077155804)
+@@ -0,0 +1,27 @@
++package com.hugoserve.metalbroker.controller; // keep or move to controller.publicapi (recommended)
++
++import com.hugoserve.metalbroker.facade.DbMetalReadFacade;
++import org.springframework.http.MediaType;
++import org.springframework.http.ResponseEntity;
++import org.springframework.web.bind.annotation.*;
++
++@RestController
++@RequestMapping("/api/v1/db/metals")
++public class DbMetalController {
++
++    private final DbMetalReadFacade facade;
++
++    public DbMetalController(DbMetalReadFacade facade) {
++        this.facade = facade;
++    }
++
++    @GetMapping(produces = MediaType.APPLICATION_JSON_VALUE)
++    public String list() {
++        return facade.list();
++    }
++
++    @GetMapping(value="/{code}", produces = MediaType.APPLICATION_JSON_VALUE)
++    public ResponseEntity<String> getByCode(@PathVariable String code) {
++        return facade.getByCode(code);
++    }
++}
+Index: src/main/java/com/hugoserve/metalbroker/utils/DbProtoMapper.java
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/src/main/java/com/hugoserve/metalbroker/utils/DbProtoMapper.java b/src/main/java/com/hugoserve/metalbroker/utils/DbProtoMapper.java
+new file mode 100644
+--- /dev/null	(date 1769056891763)
++++ b/src/main/java/com/hugoserve/metalbroker/utils/DbProtoMapper.java	(date 1769056891763)
+@@ -0,0 +1,90 @@
++package com.hugoserve.metalbroker.utils;
++
++import com.google.protobuf.Timestamp;
++import com.hugoserve.metalbroker.domain.entity.*;
++import com.hugoserve.metalbroker.proto.MetalRatesProto;
++import org.springframework.stereotype.Component;
++
++import java.time.Instant;
++
++@Component
++public class DbProtoMapper {
++
++    public MetalRatesProto.Metal toMetalEnum(String code) {
++        if (code == null) return MetalRatesProto.Metal.METAL_UNSPECIFIED;
++        try {
++            return MetalRatesProto.Metal.valueOf(code.trim().toUpperCase()); // "XAU"
++        } catch (Exception e) {
++            return MetalRatesProto.Metal.METAL_UNSPECIFIED;
++        }
++    }
++
++    public Timestamp toTs(Instant instant) {
++        if (instant == null) return Timestamp.getDefaultInstance();
++        return Timestamp.newBuilder()
++                .setSeconds(instant.getEpochSecond())
++                .setNanos(instant.getNano())
++                .build();
++    }
++
++    public MetalRatesProto.MetalInfo metalInfo(MetalEntity e) {
++        return MetalRatesProto.MetalInfo.newBuilder()
++                .setId(e.getId() == null ? 0L : e.getId())
++                .setMetal(toMetalEnum(e.getCode()))
++                .setName(e.getName() == null ? "" : e.getName())
++                .setIsActive(e.isActive())
++                .build();
++    }
++
++    public MetalRatesProto.LatestSnapshot latestSnapshot(MetalLatestEntity e) {
++        MetalEntity m = e.getMetal();
++        MetalRatesProto.Metal metalEnum = (m == null) ? MetalRatesProto.Metal.METAL_UNSPECIFIED : toMetalEnum(m.getCode());
++
++        return MetalRatesProto.LatestSnapshot.newBuilder()
++                .setMetal(metalEnum)
++                .setFeedTsUtc(toTs(e.getFeedTsUtc()))
++                .setCapturedAtUtc(toTs(e.getCapturedAtUtc()))
++                .setAsk(e.getAsk() == null ? 0 : e.getAsk().doubleValue())
++                .setMid(e.getMid() == null ? 0 : e.getMid().doubleValue())
++                .setBid(e.getBid() == null ? 0 : e.getBid().doubleValue())
++                .setValue(e.getValue() == null ? 0 : e.getValue().doubleValue())
++                .setPerformance(e.getPerformance() == null ? 0 : e.getPerformance().doubleValue())
++                .setSource(e.getSource() == null ? "" : e.getSource())
++                .build();
++    }
++
++    public MetalRatesProto.Tick5m tick5m(SpotTick5mEntity e) {
++        MetalEntity m = e.getMetal();
++        MetalRatesProto.Metal metalEnum = (m == null) ? MetalRatesProto.Metal.METAL_UNSPECIFIED : toMetalEnum(m.getCode());
++
++        return MetalRatesProto.Tick5m.newBuilder()
++                .setMetal(metalEnum)
++                .setTsUtc(toTs(e.getTsUtc()))
++                .setAsk(e.getAsk() == null ? 0 : e.getAsk().doubleValue())
++                .setMid(e.getMid() == null ? 0 : e.getMid().doubleValue())
++                .setBid(e.getBid() == null ? 0 : e.getBid().doubleValue())
++                .setValue(e.getValue() == null ? 0 : e.getValue().doubleValue())
++                .setPerformance(e.getPerformance() == null ? 0 : e.getPerformance().doubleValue())
++                .setSource(e.getSource() == null ? "" : e.getSource())
++                .build();
++    }
++
++    public MetalRatesProto.DailyHistoryCandle dailyHistoryCandle(MetalDailyHistoryEntity e) {
++        MetalEntity m = e.getMetal();
++        MetalRatesProto.Metal metalEnum = (m == null) ? MetalRatesProto.Metal.METAL_UNSPECIFIED : toMetalEnum(m.getCode());
++
++        var b = MetalRatesProto.DailyHistoryCandle.newBuilder()
++                .setMetal(metalEnum)
++                .setDayUtc(e.getDayUtc() == null ? "" : e.getDayUtc().toString())
++                .setOpen(e.getOpen() == null ? 0 : e.getOpen().doubleValue())
++                .setHigh(e.getHigh() == null ? 0 : e.getHigh().doubleValue())
++                .setLow(e.getLow() == null ? 0 : e.getLow().doubleValue())
++                .setClose(e.getClose() == null ? 0 : e.getClose().doubleValue())
++                .setSource(e.getSource() == null ? "" : e.getSource());
++
++        if (e.getMa50() != null) b.setMa50(e.getMa50().doubleValue());
++        if (e.getMa200() != null) b.setMa200(e.getMa200().doubleValue());
++
++        return b.build();
++    }
++}
+Index: src/main/java/com/hugoserve/metalbroker/security/ApiAuthorizationFilter.java
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/src/main/java/com/hugoserve/metalbroker/security/ApiAuthorizationFilter.java b/src/main/java/com/hugoserve/metalbroker/security/ApiAuthorizationFilter.java
+new file mode 100644
+--- /dev/null	(date 1769497279019)
++++ b/src/main/java/com/hugoserve/metalbroker/security/ApiAuthorizationFilter.java	(date 1769497279019)
+@@ -0,0 +1,85 @@
++package com.hugoserve.metalbroker.security;
++
++import jakarta.servlet.FilterChain;
++import jakarta.servlet.ServletException;
++import jakarta.servlet.http.HttpServletRequest;
++import jakarta.servlet.http.HttpServletResponse;
++import lombok.RequiredArgsConstructor;
++//import org.hibernate.validator.internal.constraintvalidators.bv.NotNullValidator;
++import org.springframework.lang.NonNull;
++import org.springframework.security.authentication.AnonymousAuthenticationToken;
++import org.springframework.security.core.Authentication;
++import org.springframework.security.core.context.SecurityContextHolder;
++import org.springframework.stereotype.Component;
++import org.springframework.web.filter.OncePerRequestFilter;
++import java.io.IOException;
++
++
++@Component
++@RequiredArgsConstructor
++public class ApiAuthorizationFilter extends OncePerRequestFilter {
++
++//    private final NotNullValidator notNullValidator;
++
++    @Override
++    protected void doFilterInternal(
++            @NonNull HttpServletRequest request,
++            @NonNull HttpServletResponse response,
++            @NonNull FilterChain filterChain
++    ) throws ServletException, IOException {
++
++        String path = request.getRequestURI();
++
++        // Allow preflight
++        if ("OPTIONS".equalsIgnoreCase(request.getMethod())) {
++            filterChain.doFilter(request, response);
++            return;
++        }
++
++        // Public APIs
++        if (path.startsWith("/api/v1/auth")
++                || path.startsWith("/actuator")) {
++            filterChain.doFilter(request, response);
++            return;
++        }
++
++        Authentication auth =
++                SecurityContextHolder.getContext().getAuthentication();
++
++        // Not logged in OR token expired
++        if (auth == null
++                || auth instanceof AnonymousAuthenticationToken
++                || !auth.isAuthenticated()) {
++
++            write(response, "LOGIN_REQUIRED");
++            return;
++        }
++
++        // Admin-only
++        if (path.startsWith("/api/v1/db/admin")) {
++            boolean isAdmin = auth.getAuthorities().stream()
++                    .anyMatch(a -> a.getAuthority().equals("ROLE_ADMIN"));
++
++            if (!isAdmin) {
++                write(response, "ADMIN_REQUIRED");
++                return;
++            }
++        }
++
++        filterChain.doFilter(request, response);
++    }
++
++    private void write(HttpServletResponse response, String code)
++            throws IOException {
++
++        response.setStatus(HttpServletResponse.SC_OK);
++        response.setContentType("application/json");
++
++        response.getWriter().write("""
++        {
++          "success": false,
++          "code": "%s"
++        }
++        """.formatted(code));
++    }
++}
+Index: src/main/java/com/hugoserve/metalbroker/domain/entity/UserEntity.java
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/src/main/java/com/hugoserve/metalbroker/domain/entity/UserEntity.java b/src/main/java/com/hugoserve/metalbroker/domain/entity/UserEntity.java
+new file mode 100644
+--- /dev/null	(date 1769404684625)
++++ b/src/main/java/com/hugoserve/metalbroker/domain/entity/UserEntity.java	(date 1769404684625)
+@@ -0,0 +1,50 @@
++package com.hugoserve.metalbroker.domain.entity;
++
++
++import com.hugoserve.metalbroker.proto.MetalRatesProto.UserRole;
++import jakarta.persistence.*;
++import lombok.AllArgsConstructor;
++import lombok.Builder;
++import lombok.Data;
++import lombok.NoArgsConstructor;
++import org.springframework.security.core.GrantedAuthority;
++import org.springframework.security.core.authority.SimpleGrantedAuthority;
++import org.springframework.security.core.userdetails.UserDetails;
++import java.util.Collection;
++import java.util.List;
++
++@Entity
++@Table(name = "users")
++@Data
++@Builder
++@NoArgsConstructor
++@AllArgsConstructor
++public class UserEntity implements UserDetails {
++
++    @Id
++    @GeneratedValue(strategy = GenerationType.IDENTITY)
++    private Long id;
++
++    @Column(unique = true, nullable = false)
++    private String email;
++
++    @Column(nullable = false)
++    private String password;
++
++    @Column(length = 2048) // JWTs can be long
++    private String currentRefreshToken;
++
++    @Enumerated(EnumType.STRING)
++    private UserRole role;
++
++    @Override
++    public Collection<? extends GrantedAuthority> getAuthorities() {
++        return List.of(new SimpleGrantedAuthority("ROLE_" + role.name()));
++    }
++
++    @Override public String getUsername() { return email; }
++    @Override public boolean isAccountNonExpired() { return true; }
++    @Override public boolean isAccountNonLocked() { return true; }
++    @Override public boolean isCredentialsNonExpired() { return true; }
++    @Override public boolean isEnabled() { return true; }
++}
+Index: src/main/java/com/hugoserve/metalbroker/controller/internal/DbTicksWriteController.java
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/src/main/java/com/hugoserve/metalbroker/controller/internal/DbTicksWriteController.java b/src/main/java/com/hugoserve/metalbroker/controller/internal/DbTicksWriteController.java
+new file mode 100644
+--- /dev/null	(date 1769076164910)
++++ b/src/main/java/com/hugoserve/metalbroker/controller/internal/DbTicksWriteController.java	(date 1769076164910)
+@@ -0,0 +1,41 @@
++package com.hugoserve.metalbroker.controller.internal;
++
++import com.hugoserve.metalbroker.facade.DbTicksAdminFacade;
++import org.springframework.http.MediaType;
++import org.springframework.http.ResponseEntity;
++import org.springframework.web.bind.annotation.*;
++
++import java.time.Instant;
++
++@RestController
++@RequestMapping("/api/v1/db/admin/ticks")
++public class DbTicksWriteController {
++
++    private final DbTicksAdminFacade facade;
++
++    public DbTicksWriteController(DbTicksAdminFacade facade) {
++        this.facade = facade;
++    }
++
++    @PostMapping(value="/upsert-one", consumes=MediaType.APPLICATION_JSON_VALUE, produces=MediaType.APPLICATION_JSON_VALUE)
++    public ResponseEntity<String> upsertOne(@RequestBody String json) {
++        return facade.upsertOne(json);
++    }
++
++    @PostMapping(value="/upsert-bulk", consumes=MediaType.APPLICATION_JSON_VALUE, produces=MediaType.APPLICATION_JSON_VALUE)
++    public ResponseEntity<String> upsertBulk(@RequestBody String json) {
++        return facade.upsertBulk(json);
++    }
++
++    @DeleteMapping(value="/{id}", produces=MediaType.APPLICATION_JSON_VALUE)
++    public ResponseEntity<String> deleteById(@PathVariable Long id) {
++        return facade.deleteById(id);
++    }
++
++    @DeleteMapping(value="/delete-range", produces=MediaType.APPLICATION_JSON_VALUE)
++    public ResponseEntity<String> deleteRange(@RequestParam String metal,
++                                              @RequestParam Instant from,
++                                              @RequestParam Instant to) {
++        return facade.deleteRange(metal, from, to);
++    }
++}
+Index: src/main/java/com/hugoserve/metalbroker/controller/internal/DbHistoryWriteController.java
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/src/main/java/com/hugoserve/metalbroker/controller/internal/DbHistoryWriteController.java b/src/main/java/com/hugoserve/metalbroker/controller/internal/DbHistoryWriteController.java
+new file mode 100644
+--- /dev/null	(date 1769076554273)
++++ b/src/main/java/com/hugoserve/metalbroker/controller/internal/DbHistoryWriteController.java	(date 1769076554273)
+@@ -0,0 +1,42 @@
++package com.hugoserve.metalbroker.controller.internal;
++
++import com.hugoserve.metalbroker.facade.DbHistoryAdminFacade;
++import org.springframework.http.MediaType;
++import org.springframework.http.ResponseEntity;
++import org.springframework.web.bind.annotation.*;
++
++import java.time.LocalDate;
++
++@RestController
++@RequestMapping("/api/v1/db/admin/history")
++public class DbHistoryWriteController {
++
++    private final DbHistoryAdminFacade facade;
++
++    public DbHistoryWriteController(DbHistoryAdminFacade facade) {
++        this.facade = facade;
++    }
++
++    @PostMapping(value="/upsert-one", consumes=MediaType.APPLICATION_JSON_VALUE, produces=MediaType.APPLICATION_JSON_VALUE)
++    public ResponseEntity<String> upsertOne(@RequestBody String json) {
++        return facade.upsertOne(json);
++    }
++
++    @PostMapping(value="/upsert-bulk", consumes=MediaType.APPLICATION_JSON_VALUE, produces=MediaType.APPLICATION_JSON_VALUE)
++    public ResponseEntity<String> upsertBulk(@RequestBody String json) {
++        return facade.upsertBulk(json);
++    }
++
++    @DeleteMapping(value="/delete-one", produces=MediaType.APPLICATION_JSON_VALUE)
++    public ResponseEntity<String> deleteOne(@RequestParam String metal,
++                                            @RequestParam LocalDate day) {
++        return facade.deleteOne(metal, day);
++    }
++
++    @DeleteMapping(value="/delete-range", produces=MediaType.APPLICATION_JSON_VALUE)
++    public ResponseEntity<String> deleteRange(@RequestParam String metal,
++                                              @RequestParam LocalDate fromDay,
++                                              @RequestParam LocalDate toDay) {
++        return facade.deleteRange(metal, fromDay, toDay);
++    }
++}

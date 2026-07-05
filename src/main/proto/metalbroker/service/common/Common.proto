@@ -1,0 +1,57 @@
+syntax = "proto3";
+
+package metalbroker.service.common;
+
+import "google/protobuf/timestamp.proto";
+
+option java_package = "com.hugoserve.metalbroker.proto.common";
+option java_multiple_files = true;
+
+// ---------- ENUMS ----------
+
+enum WeightUnit {
+  WEIGHT_UNIT_UNSPECIFIED = 0;
+  G = 1;
+  KG = 2;
+  OZ = 3;
+}
+
+enum Metal {
+  METAL_UNSPECIFIED = 0;
+  XAG = 1;
+  XAU = 2;
+  XPD = 3;
+  XPT = 4;
+}
+
+enum Currency {
+  CURRENCY_UNSPECIFIED = 0;
+  PKR = 1;
+  INR = 2;
+  USD = 3;
+  EUR = 4;
+  JPY = 5;
+  AUD = 6;
+}
+
+enum UserRole {
+  USER_ROLE_UNSPECIFIED = 0;
+  USER = 1;
+  ADMIN = 2;
+}
+
+// ---------- PAGINATION ----------
+
+message PageInfo {
+  int32 page = 1;
+  int32 size = 2;
+  int64 total_elements = 3;
+  int32 total_pages = 4;
+}
+
+message ApiError {
+  bool success = 1;
+  string code = 2;
+  string message = 3;
+}
+

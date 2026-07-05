@@ -1,0 +1,32 @@
+syntax = "proto3";
+
+package metalbroker.service.wallet;
+
+import "metalbroker/service/common/Common.proto";
+
+option java_package = "com.hugoserve.metalbroker.proto.wallet";
+option java_multiple_files = true;
+
+// ---------- WALLET ----------
+
+message WalletBalance {
+  metalbroker.service.common.Metal metal = 1;
+  double balance = 2;
+  double valuation = 3;
+  metalbroker.service.common.WeightUnit unit = 4;
+  metalbroker.service.common.Currency currency = 5;
+}
+
+message WalletSummary {
+  string wallet_id = 1;
+  metalbroker.service.common.Currency currency = 2;
+  repeated WalletBalance balances = 3;
+  double cash_balance = 4;
+  double total_equity = 5;
+}
+
+message WalletResponse {
+  bool success = 1;
+  string message = 2;
+  double cash_balance = 3;
+}

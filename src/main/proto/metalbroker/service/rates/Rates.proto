@@ -1,0 +1,42 @@
+syntax = "proto3";
+
+package metalbroker.service.rates;
+
+import "google/protobuf/timestamp.proto";
+import "metalbroker/service/common/Common.proto";
+
+option java_package = "com.hugoserve.metalbroker.proto.rates";
+option java_multiple_files = true;
+
+// ---------- SNAPSHOT ----------
+
+message LatestSnapshot {
+  metalbroker.service.common.Metal metal = 1;
+  google.protobuf.Timestamp feed_ts_utc = 2;
+  google.protobuf.Timestamp captured_at_utc = 3;
+  double ask = 4;
+  double mid = 5;
+  double bid = 6;
+  double value = 7;
+  double performance = 8;
+  string source = 9;
+}
+
+// ---------- TICKS ----------
+
+message Tick5m {
+  metalbroker.service.common.Metal metal = 1;
+  google.protobuf.Timestamp ts_utc = 2;
+  double ask = 3;
+  double mid = 4;
+  double bid = 5;
+  double value = 6;
+  double performance = 7;
+  string source = 8;
+}
+
+message Tick5mPage {
+  metalbroker.service.common.Metal metal = 1;
+  repeated Tick5m items = 2;
+  metalbroker.service.common.PageInfo page = 3;
+}

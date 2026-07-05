@@ -435,7 +435,7 @@ Current tests include
 Backend Developer | Java | Spring Boot | Distributed Systems
 
 LinkedIn:
-> [https://linkedin.com/in/your-profile](https://www.linkedin.com/in/ayush-mishra-a122cs/)
+> [Profile](https://www.linkedin.com/in/ayush-mishra-a122cs/)
 
 GitHub:
 > https://github.com/ayushmishra90
